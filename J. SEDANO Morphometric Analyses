@@ -1,0 +1,1736 @@
+---
+title: "Measurement Precision"
+author: "Jonathan Sedano"
+date: "2023-03-10"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Importing Libraries & Packages
+```{r, include=FALSE}
+## Import Libraries
+library("bestNormalize")
+library("broom")
+library("car")
+library("forcats")
+library("gsheet")
+library("ggplot2")
+library("ggpubr")
+library("ggh4x")
+library("gt")
+library("Hmisc")
+library("knitr")
+library("lmtest")
+library("nortest")
+library("psych")
+library("rmarkdown")
+library("scales")
+library("simpleboot")
+library("tidyverse")
+library("WRS2")
+library("openxlsx")
+```
+
+## Import Human Autopod Data from Google Sheet
+```{r, include=FALSE}
+## Retrieve Recent Data
+human_autopod_data <- gsheet2tbl(url="https://docs.google.com/spreadsheets/d/1mzXWDMwi8ok37ChaK3bLmeHBsXdeCAxKSKo2__jbBxw/edit#gid=645959465")
+human_autopod_samples <- gsheet2tbl(url="https://docs.google.com/spreadsheets/d/1mzXWDMwi8ok37ChaK3bLmeHBsXdeCAxKSKo2__jbBxw/edit#gid=1923691536")
+human_autopod_data$measurement_date <- as.Date(human_autopod_data$measurement_date, format ="%m/%d/%Y")
+
+human_measurements_key <- gsheet2tbl(url="https://docs.google.com/spreadsheets/d/1mzXWDMwi8ok37ChaK3bLmeHBsXdeCAxKSKo2__jbBxw/edit#gid=3238789")
+
+human_measurements <- colnames(human_autopod_data)[8:47]
+human_autopod_data_tidy <- human_autopod_data %>% pivot_longer(all_of(human_measurements), names_to = "measurement_id") %>% select(-notes)%>% select(-timepoint)
+human_autopod_data_tidy_merged <- merge(human_autopod_data_tidy, human_measurements_key)
+human_autopod_data_tidy_merged <- merge(human_autopod_data_tidy_merged, human_autopod_samples, by= 'sample_id')
+human_autopod_data_tidy_merged_avg <- human_autopod_data_tidy_merged %>% filter(value != 'NA') %>%  group_by(element, sex, timepoint, sample_id, measurement_date, measurer) %>% summarise_at(vars(value), list(value = mean))
+```
+
+## Import Mouse Autopod Data from Google Sheet
+```{r, include=FALSE}
+## Retrieve Recent Data
+mouse_autopod_data <- gsheet2tbl(url="https://docs.google.com/spreadsheets/d/1mzXWDMwi8ok37ChaK3bLmeHBsXdeCAxKSKo2__jbBxw/edit#gid=1826500199")
+mouse_autopod_samples <- gsheet2tbl(url="https://docs.google.com/spreadsheets/d/1mzXWDMwi8ok37ChaK3bLmeHBsXdeCAxKSKo2__jbBxw/edit#gid=597198010")
+mouse_autopod_data$measurement_date <- as.Date(mouse_autopod_data$measurement_date, format ="%m/%d/%Y")
+
+mouse_measurements_key <- gsheet2tbl(url="https://docs.google.com/spreadsheets/d/1mzXWDMwi8ok37ChaK3bLmeHBsXdeCAxKSKo2__jbBxw/edit#gid=3238789")
+
+mouse_measurements <- colnames(mouse_autopod_data)[8:47]
+mouse_autopod_data_tidy <- mouse_autopod_data %>% pivot_longer(all_of(mouse_measurements), names_to = "measurement_id") %>% select(-notes)%>% select(-timepoint)
+mouse_autopod_data_tidy_merged <- merge(mouse_autopod_data_tidy, mouse_measurements_key)
+mouse_autopod_data_tidy_merged <- merge(mouse_autopod_data_tidy_merged, mouse_autopod_samples, by= 'sample_id')
+mouse_autopod_data_tidy_merged_avg <- mouse_autopod_data_tidy_merged %>% filter(value != 'NA') %>%  group_by(element, sex, timepoint, sample_id, measurement_date, measurer) %>% summarise_at(vars(value), list(value = mean))
+```
+
+## Human Embryonic Autopod Measurements
+```{r, include=FALSE}
+# Create a data frame of averaged length data for each side
+human_autopod_data_avg <- human_autopod_data[1:7]
+human_autopod_data_avg$HP1_avg <- rowMeans(human_autopod_data[,c('HP1_R_len','HP1_L_len')], na.rm = TRUE)
+human_autopod_data_avg$HP2_avg <- rowMeans(human_autopod_data[,c('HP2_R_len','HP2_L_len')], na.rm = TRUE)
+human_autopod_data_avg$HP3_avg <- rowMeans(human_autopod_data[,c('HP3_R_len','HP3_L_len')], na.rm = TRUE)
+human_autopod_data_avg$HP4_avg <- rowMeans(human_autopod_data[,c('HP4_R_len','HP4_L_len')], na.rm = TRUE)
+human_autopod_data_avg$HP5_avg <- rowMeans(human_autopod_data[,c('HP5_R_len','HP5_L_len')], na.rm = TRUE)
+human_autopod_data_avg$HM1_avg <- rowMeans(human_autopod_data[,c('HM1_R_len','HM1_L_len')], na.rm = TRUE)
+human_autopod_data_avg$HM2_avg <- rowMeans(human_autopod_data[,c('HM2_R_len','HM2_L_len')], na.rm = TRUE)
+human_autopod_data_avg$HM3_avg <- rowMeans(human_autopod_data[,c('HM3_R_len','HM3_L_len')], na.rm = TRUE)
+human_autopod_data_avg$HM4_avg <- rowMeans(human_autopod_data[,c('HM4_R_len','HM4_L_len')], na.rm = TRUE)
+human_autopod_data_avg$HM5_avg <- rowMeans(human_autopod_data[,c('HM5_R_len','HM5_L_len')], na.rm = TRUE)
+human_autopod_data_avg$FP1_avg <- rowMeans(human_autopod_data[,c('FP1_R_len','FP1_L_len')], na.rm = TRUE)
+human_autopod_data_avg$FP2_avg <- rowMeans(human_autopod_data[,c('FP2_R_len','FP2_L_len')], na.rm = TRUE)
+human_autopod_data_avg$FP3_avg <- rowMeans(human_autopod_data[,c('FP3_R_len','FP3_L_len')], na.rm = TRUE)
+human_autopod_data_avg$FP4_avg <- rowMeans(human_autopod_data[,c('FP4_R_len','FP4_L_len')], na.rm = TRUE)
+human_autopod_data_avg$FP5_avg <- rowMeans(human_autopod_data[,c('FP5_R_len','FP5_L_len')], na.rm = TRUE)
+human_autopod_data_avg$FM1_avg <- rowMeans(human_autopod_data[,c('FM1_R_len','FM1_L_len')], na.rm = TRUE)
+human_autopod_data_avg$FM2_avg <- rowMeans(human_autopod_data[,c('FM2_R_len','FM2_L_len')], na.rm = TRUE)
+human_autopod_data_avg$FM3_avg <- rowMeans(human_autopod_data[,c('FM3_R_len','FM3_L_len')], na.rm = TRUE)
+human_autopod_data_avg$FM4_avg <- rowMeans(human_autopod_data[,c('FM4_R_len','FM4_L_len')], na.rm = TRUE)
+human_autopod_data_avg$FM5_avg <- rowMeans(human_autopod_data[,c('FM5_R_len','FM5_L_len')], na.rm = TRUE)
+```
+
+## Mouse Embryonic Autopod Measurements
+```{r, include=FALSE}
+# Create a data frame of averaged length data for each side
+mouse_autopod_data_avg <- mouse_autopod_data[1:7]
+mouse_autopod_data_avg$HP1_avg <- rowMeans(mouse_autopod_data[,c('HP1_R_len','HP1_L_len')], na.rm = TRUE)
+mouse_autopod_data_avg$HP2_avg <- rowMeans(mouse_autopod_data[,c('HP2_R_len','HP2_L_len')], na.rm = TRUE)
+mouse_autopod_data_avg$HP3_avg <- rowMeans(mouse_autopod_data[,c('HP3_R_len','HP3_L_len')], na.rm = TRUE)
+mouse_autopod_data_avg$HP4_avg <- rowMeans(mouse_autopod_data[,c('HP4_R_len','HP4_L_len')], na.rm = TRUE)
+mouse_autopod_data_avg$HP5_avg <- rowMeans(mouse_autopod_data[,c('HP5_R_len','HP5_L_len')], na.rm = TRUE)
+mouse_autopod_data_avg$HM1_avg <- rowMeans(mouse_autopod_data[,c('HM1_R_len','HM1_L_len')], na.rm = TRUE)
+mouse_autopod_data_avg$HM2_avg <- rowMeans(mouse_autopod_data[,c('HM2_R_len','HM2_L_len')], na.rm = TRUE)
+mouse_autopod_data_avg$HM3_avg <- rowMeans(mouse_autopod_data[,c('HM3_R_len','HM3_L_len')], na.rm = TRUE)
+mouse_autopod_data_avg$HM4_avg <- rowMeans(mouse_autopod_data[,c('HM4_R_len','HM4_L_len')], na.rm = TRUE)
+mouse_autopod_data_avg$HM5_avg <- rowMeans(mouse_autopod_data[,c('HM5_R_len','HM5_L_len')], na.rm = TRUE)
+mouse_autopod_data_avg$FP1_avg <- rowMeans(mouse_autopod_data[,c('FP1_R_len','FP1_L_len')], na.rm = TRUE)
+mouse_autopod_data_avg$FP2_avg <- rowMeans(mouse_autopod_data[,c('FP2_R_len','FP2_L_len')], na.rm = TRUE)
+mouse_autopod_data_avg$FP3_avg <- rowMeans(mouse_autopod_data[,c('FP3_R_len','FP3_L_len')], na.rm = TRUE)
+mouse_autopod_data_avg$FP4_avg <- rowMeans(mouse_autopod_data[,c('FP4_R_len','FP4_L_len')], na.rm = TRUE)
+mouse_autopod_data_avg$FP5_avg <- rowMeans(mouse_autopod_data[,c('FP5_R_len','FP5_L_len')], na.rm = TRUE)
+mouse_autopod_data_avg$FM1_avg <- rowMeans(mouse_autopod_data[,c('FM1_R_len','FM1_L_len')], na.rm = TRUE)
+mouse_autopod_data_avg$FM2_avg <- rowMeans(mouse_autopod_data[,c('FM2_R_len','FM2_L_len')], na.rm = TRUE)
+mouse_autopod_data_avg$FM3_avg <- rowMeans(mouse_autopod_data[,c('FM3_R_len','FM3_L_len')], na.rm = TRUE)
+mouse_autopod_data_avg$FM4_avg <- rowMeans(mouse_autopod_data[,c('FM4_R_len','FM4_L_len')], na.rm = TRUE)
+mouse_autopod_data_avg$FM5_avg <- rowMeans(mouse_autopod_data[,c('FM5_R_len','FM5_L_len')], na.rm = TRUE)
+```
+
+## Percentage Measurement Precision
+```{r, include=FALSE}
+# Retrieve Recent Data
+original_data <- gsheet2tbl(url="docs.google.com/spreadsheets/d/1mzXWDMwi8ok37ChaK3bLmeHBsXdeCAxKSKo2__jbBxw/edit#gid=661840542")
+remeasured_data <- gsheet2tbl(url="https://docs.google.com/spreadsheets/d/1mzXWDMwi8ok37ChaK3bLmeHBsXdeCAxKSKo2__jbBxw/edit#gid=750827456")
+## Percent Measurement Precision
+percent_precision <- function(x,y) {
+  output = (100-((abs(x-y))/(x))*100)
+  return(output)
+}
+
+# Running Percent Precision Function + Saving it as a Data Frame
+autopod_percent_precision <- percent_precision(original_data[c(8:47)], remeasured_data[c(8:47)]) %>% 
+  cbind(original_data[1:2], .) %>% view()
+```
+
+## Z-Scores - Human
+```{r}
+# Z-Scores
+  # Excluding data w/o CRL
+human_autopod_data_CRL <- human_autopod_data_avg[-c(2,11),]
+  # Making the Z-Scores
+human_autopod_data_z_score <- human_autopod_data_CRL[1:6]
+
+human_autopod_data_z_score$Crown_rump_length <- (human_autopod_data_CRL$Crown_rump_length - mean(human_autopod_data_CRL$Crown_rump_length, na.rm = TRUE)) / sd(human_autopod_data_CRL$Crown_rump_length, na.rm = TRUE)
+
+human_autopod_data_z_score$HP1_z_score <- (human_autopod_data_CRL$HP1_avg - mean(human_autopod_data_CRL$HP1_avg)) / sd(human_autopod_data_CRL$HP1_avg)
+human_autopod_data_z_score$HP2_z_score <- (human_autopod_data_CRL$HP2_avg - mean(human_autopod_data_CRL$HP2_avg)) / sd(human_autopod_data_CRL$HP2_avg)
+human_autopod_data_z_score$HP3_z_score <- (human_autopod_data_CRL$HP3_avg - mean(human_autopod_data_CRL$HP3_avg)) / sd(human_autopod_data_CRL$HP3_avg)
+human_autopod_data_z_score$HP4_z_score <- (human_autopod_data_CRL$HP4_avg - mean(human_autopod_data_CRL$HP4_avg)) / sd(human_autopod_data_CRL$HP4_avg)
+human_autopod_data_z_score$HP5_z_score <- (human_autopod_data_CRL$HP5_avg - mean(human_autopod_data_CRL$HP5_avg)) / sd(human_autopod_data_CRL$HP5_avg)
+
+human_autopod_data_z_score$HM1_z_score <- (human_autopod_data_CRL$HM1_avg - mean(human_autopod_data_CRL$HM1_avg)) / sd(human_autopod_data_CRL$HM1_avg)
+human_autopod_data_z_score$HM2_z_score <- (human_autopod_data_CRL$HM2_avg - mean(human_autopod_data_CRL$HM2_avg)) / sd(human_autopod_data_CRL$HM2_avg)
+human_autopod_data_z_score$HM3_z_score <- (human_autopod_data_CRL$HM3_avg - mean(human_autopod_data_CRL$HM3_avg)) / sd(human_autopod_data_CRL$HM3_avg)
+human_autopod_data_z_score$HM4_z_score <- (human_autopod_data_CRL$HM4_avg - mean(human_autopod_data_CRL$HM4_avg)) / sd(human_autopod_data_CRL$HM4_avg)
+human_autopod_data_z_score$HM5_z_score <- (human_autopod_data_CRL$HM5_avg - mean(human_autopod_data_CRL$HM5_avg)) / sd(human_autopod_data_CRL$HM5_avg)
+
+human_autopod_data_z_score$FP1_z_score <- (human_autopod_data_CRL$FP1_avg - mean(human_autopod_data_CRL$FP1_avg)) / sd(human_autopod_data_CRL$FP1_avg)
+human_autopod_data_z_score$FP2_z_score <- (human_autopod_data_CRL$FP2_avg - mean(human_autopod_data_CRL$FP2_avg)) / sd(human_autopod_data_CRL$FP2_avg)
+human_autopod_data_z_score$FP3_z_score <- (human_autopod_data_CRL$FP3_avg - mean(human_autopod_data_CRL$FP3_avg)) / sd(human_autopod_data_CRL$FP3_avg)
+human_autopod_data_z_score$FP4_z_score <- (human_autopod_data_CRL$FP4_avg - mean(human_autopod_data_CRL$FP4_avg)) / sd(human_autopod_data_CRL$FP4_avg)
+human_autopod_data_z_score$FP5_z_score <- (human_autopod_data_CRL$FP5_avg - mean(human_autopod_data_CRL$FP5_avg)) / sd(human_autopod_data_CRL$FP5_avg)
+
+human_autopod_data_z_score$FM1_z_score <- (human_autopod_data_CRL$FM1_avg - mean(human_autopod_data_CRL$FM1_avg)) / sd(human_autopod_data_CRL$FM1_avg)
+human_autopod_data_z_score$FM2_z_score <- (human_autopod_data_CRL$FM2_avg - mean(human_autopod_data_CRL$FM2_avg)) / sd(human_autopod_data_CRL$FM2_avg)
+human_autopod_data_z_score$FM3_z_score <- (human_autopod_data_CRL$FM3_avg - mean(human_autopod_data_CRL$FM3_avg)) / sd(human_autopod_data_CRL$FM3_avg)
+human_autopod_data_z_score$FM4_z_score <- (human_autopod_data_CRL$FM4_avg - mean(human_autopod_data_CRL$FM4_avg)) / sd(human_autopod_data_CRL$FM4_avg)
+human_autopod_data_z_score$FM5_z_score <- (human_autopod_data_CRL$FM5_avg - mean(human_autopod_data_CRL$FM5_avg)) / sd(human_autopod_data_CRL$FM5_avg)
+```
+
+## Growth Curves - Human
+```{r}
+# Facet_Wrap for Human Growth Curves by Elements - Linear
+ggplot(data = human_autopod_data_tidy_merged_avg, aes(timepoint, value)) +
+  geom_point(color="magenta") + 
+  labs(y = "Length (mm)", x = "Embyronic Timepoint (Day)") + 
+  facet_wrap(~ element, nrow = 4)  + stat_smooth(method = 'lm', formula = y ~ x, geom = "smooth", color="magenta")
+
+# Facet_Wrap for Human Growth Curves by Elements & Sex - Linear
+ggplot(data = human_autopod_data_tidy_merged_avg, aes(timepoint, value, color = sex)) +
+  geom_point() + 
+  labs(y = "Length (mm)", x = "Embyronic Timepoint (Day)",
+       color = "Sex") + 
+  facet_wrap(~ element, nrow = 4) + stat_smooth(method = 'lm', formula = y ~ x, geom = "smooth")
+```
+
+## Intrinsic Measure - Human
+```{r}
+# Intrinsic Measure: Ontogenetic Scaling of Manual and Pedal Phalangeal Indices [RECREATION OF FIGURES 5 & 6]
+  # In terms of the ontogenetic scaling for this paper, Young focuses on comparing the Phalangeal Indices in comparison to Relative Age. For this R script I just decided to stick with comparing the Phalangeal Indices in comparison to the Actual Age also known as the Embryonic Day in this comparison.
+
+  # The formula for the this version of the "Phalangeal Index" is:
+    # Phalangeal Index = (Length of a Ray's Phalanges)/(Length of a Ray's Metapodial)
+
+  # Formatting the Data
+human_autopod_data_intrinsic <- human_autopod_data_avg[1:7]
+
+human_autopod_data_intrinsic$HUMAN_MANUAL_DIGIT_1 <- ((human_autopod_data_avg$HP1_avg/human_autopod_data_avg$HM1_avg))
+human_autopod_data_intrinsic$HUMAN_MANUAL_DIGIT_2 <- ((human_autopod_data_avg$HP2_avg/human_autopod_data_avg$HM2_avg))
+human_autopod_data_intrinsic$HUMAN_MANUAL_DIGIT_3 <- ((human_autopod_data_avg$HP3_avg/human_autopod_data_avg$HM3_avg))
+human_autopod_data_intrinsic$HUMAN_MANUAL_DIGIT_4 <- ((human_autopod_data_avg$HP4_avg/human_autopod_data_avg$HM4_avg))
+human_autopod_data_intrinsic$HUMAN_MANUAL_DIGIT_5 <- ((human_autopod_data_avg$HP5_avg/human_autopod_data_avg$HM5_avg))
+
+human_autopod_data_intrinsic$HUMAN_PEDAL_DIGIT_1 <- ((human_autopod_data_avg$FP1_avg/human_autopod_data_avg$FM1_avg))
+human_autopod_data_intrinsic$HUMAN_PEDAL_DIGIT_2 <- ((human_autopod_data_avg$FP2_avg/human_autopod_data_avg$FM2_avg))
+human_autopod_data_intrinsic$HUMAN_PEDAL_DIGIT_3 <- ((human_autopod_data_avg$FP3_avg/human_autopod_data_avg$FM3_avg))
+human_autopod_data_intrinsic$HUMAN_PEDAL_DIGIT_4 <- ((human_autopod_data_avg$FP4_avg/human_autopod_data_avg$FM4_avg))
+human_autopod_data_intrinsic$HUMAN_PEDAL_DIGIT_5 <- ((human_autopod_data_avg$FP5_avg/human_autopod_data_avg$FM5_avg))
+
+human_autopod_data_intrinsic$timepoint <- as.numeric(as.character(human_autopod_data_intrinsic$timepoint))
+
+# Making the Models
+    # Manual Digit 1 PI
+model_intrinsic_young_1 = lm(HUMAN_MANUAL_DIGIT_1 ~ timepoint, data = human_autopod_data_intrinsic)
+    # Manual Digit 2 PI
+model_intrinsic_young_2 = lm(HUMAN_MANUAL_DIGIT_2 ~ timepoint, data = human_autopod_data_intrinsic)
+    # Manual Digit 3 PI
+model_intrinsic_young_3 = lm(HUMAN_MANUAL_DIGIT_3 ~ timepoint, data = human_autopod_data_intrinsic)
+    # Manual Digit 4 PI
+model_intrinsic_young_4 = lm(HUMAN_MANUAL_DIGIT_4 ~ timepoint, data = human_autopod_data_intrinsic)
+    # Manual Digit 5 PI
+model_intrinsic_young_5 = lm(HUMAN_MANUAL_DIGIT_5 ~ timepoint, data = human_autopod_data_intrinsic)
+    # Pedal Digit 1 PI
+model_intrinsic_young_6 = lm(HUMAN_PEDAL_DIGIT_1 ~ timepoint, data = human_autopod_data_intrinsic)
+    # Pedal Digit 2 PI
+model_intrinsic_young_7 = lm(HUMAN_PEDAL_DIGIT_2 ~ timepoint, data = human_autopod_data_intrinsic)
+    # Pedal Digit 3 PI
+model_intrinsic_young_8 = lm(HUMAN_PEDAL_DIGIT_3 ~ timepoint, data = human_autopod_data_intrinsic)
+    # Pedal Digit 4 PI
+model_intrinsic_young_9 = lm(HUMAN_PEDAL_DIGIT_4 ~ timepoint, data = human_autopod_data_intrinsic)
+    # Pedal Digit 5 PI
+model_intrinsic_young_10 = lm(HUMAN_PEDAL_DIGIT_5 ~ timepoint, data = human_autopod_data_intrinsic)
+
+# Extracting Numbers
+m = summary(model_intrinsic_young_1)
+  mean_intrinsic_young_1 <- m$coefficients[2,1]
+  upper_bound_intrinsic_young_1 <- confint(model_intrinsic_young_1, "timepoint")[2]
+  lower_bound_intrinsic_young_1 <- confint(model_intrinsic_young_1, "timepoint")[1]
+  t_value_intrinsic_young_1 <- m$coefficients[2,3]
+  p_value_intrinsic_young_1_human <- m$coefficients[2,4]
+  
+m = summary(model_intrinsic_young_2)
+  mean_intrinsic_young_2 <- m$coefficients[2,1]
+  upper_bound_intrinsic_young_2 <- confint(model_intrinsic_young_2, "timepoint")[2]
+  lower_bound_intrinsic_young_2 <- confint(model_intrinsic_young_2, "timepoint")[1]
+  t_value_intrinsic_young_2 <- m$coefficients[2,3]
+  p_value_intrinsic_young_2_human <- m$coefficients[2,4]
+  
+m = summary(model_intrinsic_young_3)
+  mean_intrinsic_young_3 <- m$coefficients[2,1]
+  upper_bound_intrinsic_young_3 <- confint(model_intrinsic_young_3, "timepoint")[2]
+  lower_bound_intrinsic_young_3 <- confint(model_intrinsic_young_3, "timepoint")[1]
+  t_value_intrinsic_young_3 <- m$coefficients[2,3]
+  p_value_intrinsic_young_3_human <- m$coefficients[2,4]
+  
+m = summary(model_intrinsic_young_4)
+  mean_intrinsic_young_4 <- m$coefficients[2,1]
+  upper_bound_intrinsic_young_4 <- confint(model_intrinsic_young_4, "timepoint")[2]
+  lower_bound_intrinsic_young_4 <- confint(model_intrinsic_young_4, "timepoint")[1]
+  t_value_intrinsic_young_4 <- m$coefficients[2,3]
+  p_value_intrinsic_young_4_human <- m$coefficients[2,4]
+  
+m = summary(model_intrinsic_young_5)
+  mean_intrinsic_young_5 <- m$coefficients[2,1]
+  upper_bound_intrinsic_young_5 <- confint(model_intrinsic_young_5, "timepoint")[2]
+  lower_bound_intrinsic_young_5 <- confint(model_intrinsic_young_5, "timepoint")[1]
+  t_value_intrinsic_young_5 <- m$coefficients[2,3]
+  p_value_intrinsic_young_5_human <- m$coefficients[2,4]
+  
+m = summary(model_intrinsic_young_6)
+  mean_intrinsic_young_6 <- m$coefficients[2,1]
+  upper_bound_intrinsic_young_6 <- confint(model_intrinsic_young_6, "timepoint")[2]
+  lower_bound_intrinsic_young_6 <- confint(model_intrinsic_young_6, "timepoint")[1]
+  t_value_intrinsic_young_6 <- m$coefficients[2,3]
+  p_value_intrinsic_young_6_human <- m$coefficients[2,4]
+  
+m = summary(model_intrinsic_young_7)
+  mean_intrinsic_young_7 <- m$coefficients[2,1]
+  upper_bound_intrinsic_young_7 <- confint(model_intrinsic_young_7, "timepoint")[2]
+  lower_bound_intrinsic_young_7 <- confint(model_intrinsic_young_7, "timepoint")[1]
+  t_value_intrinsic_young_7 <- m$coefficients[2,3]
+  p_value_intrinsic_young_7_human <- m$coefficients[2,4]
+  
+m = summary(model_intrinsic_young_8)
+  mean_intrinsic_young_8 <- m$coefficients[2,1]
+  upper_bound_intrinsic_young_8 <- confint(model_intrinsic_young_8, "timepoint")[2]
+  lower_bound_intrinsic_young_8 <- confint(model_intrinsic_young_8, "timepoint")[1]
+  t_value_intrinsic_young_8 <- m$coefficients[2,3]
+  p_value_intrinsic_young_8_human <- m$coefficients[2,4]
+  
+m = summary(model_intrinsic_young_9)
+  mean_intrinsic_young_9 <- m$coefficients[2,1]
+  upper_bound_intrinsic_young_9 <- confint(model_intrinsic_young_9, "timepoint")[2]
+  lower_bound_intrinsic_young_9 <- confint(model_intrinsic_young_9, "timepoint")[1]
+  t_value_intrinsic_young_9 <- m$coefficients[2,3]
+  p_value_intrinsic_young_9_human <- m$coefficients[2,4]
+  
+m = summary(model_intrinsic_young_10)
+  mean_intrinsic_young_10 <- m$coefficients[2,1]
+  upper_bound_intrinsic_young_10 <- confint(model_intrinsic_young_10, "timepoint")[2]
+  lower_bound_intrinsic_young_10 <- confint(model_intrinsic_young_10, "timepoint")[1]
+  t_value_intrinsic_young_10 <- m$coefficients[2,3]
+  p_value_intrinsic_young_10_human <- m$coefficients[2,4]
+```
+
+## Ontogenetic Changes in Phalangeal Indices Graphs - Human
+```{r}
+# Formatting the Data for Tidyverse
+  # Changing Names
+human_autopod_data_intrinsic_graph <- human_autopod_data_intrinsic %>% 
+        rename("MANUAL DIGIT 1" = "HUMAN_MANUAL_DIGIT_1",
+               "MANUAL DIGIT 2" = "HUMAN_MANUAL_DIGIT_2",
+               "MANUAL DIGIT 3" = "HUMAN_MANUAL_DIGIT_3",
+               "MANUAL DIGIT 4" = "HUMAN_MANUAL_DIGIT_4",
+               "MANUAL DIGIT 5" = "HUMAN_MANUAL_DIGIT_5",
+               "PEDAL DIGIT 1" = "HUMAN_PEDAL_DIGIT_1",
+               "PEDAL DIGIT 2" = "HUMAN_PEDAL_DIGIT_2",
+               "PEDAL DIGIT 3" = "HUMAN_PEDAL_DIGIT_3",
+               "PEDAL DIGIT 4" = "HUMAN_PEDAL_DIGIT_4",
+               "PEDAL DIGIT 5" = "HUMAN_PEDAL_DIGIT_5")
+  # TidyVerse
+human_measurements <- colnames(human_autopod_data_intrinsic_graph)[8:17]
+human_autopod_data_tidy_intrinsic <- human_autopod_data_intrinsic_graph %>% pivot_longer(all_of(human_measurements), names_to = "measurement_id")
+
+# Facet-Wrap() for Ontogenetic Changes in Phalangeal Indices
+ggp_hpi <- ggplot(data = human_autopod_data_tidy_intrinsic, aes(timepoint, value)) +
+  geom_point(color="magenta") + 
+  labs(y = "Phalangeal Indices", x = "Embryonic Timepoint (Day)") +
+  facet_wrap(~ measurement_id, nrow = 2)  + stat_smooth(method = 'lm', formula = y ~ x, geom = "smooth", color="magenta")
+ggp_hpi
+
+# Facet-Wrap() for Ontogenetic Changes in Phalangeal Indices + Adult Human Phalangeal Indices
+  # Defining the Adult Human Phalangeal Indices
+adult_human_pi <- gsheet2tbl(url="https://docs.google.com/spreadsheets/d/1mzXWDMwi8ok37ChaK3bLmeHBsXdeCAxKSKo2__jbBxw/edit#gid=1420161400")
+  # Combining with measurement_id
+human_autopod_data_tidy_intrinsic_hline <- data.frame(measurement_id = unique(human_autopod_data_tidy_intrinsic$measurement_id), hline = adult_human_pi$phalangeal_indices_value)
+  # Facet-Wrap()
+ggp_hpi +
+  geom_hline(data = human_autopod_data_tidy_intrinsic_hline, 
+             aes(yintercept = hline))
+```
+
+## Summation Plots & Tables of Intrinsic Measurements - Human
+```{r}
+Young_Manual_Phalangeal_Indices <- data.frame(Autopod_Digit_Number = c("MANUAL DIGIT 1","MANUAL DIGIT 2", "MANUAL DIGIT 3", "MANUAL DIGIT 4", "MANUAL DIGIT 5"),
+  Mean = c(mean_intrinsic_young_1, mean_intrinsic_young_2, mean_intrinsic_young_3, mean_intrinsic_young_4, mean_intrinsic_young_5),
+  Upper_Bound = c(upper_bound_intrinsic_young_1, upper_bound_intrinsic_young_2, upper_bound_intrinsic_young_3, upper_bound_intrinsic_young_4, upper_bound_intrinsic_young_5),
+  Lower_Bound = c(lower_bound_intrinsic_young_1, lower_bound_intrinsic_young_2, lower_bound_intrinsic_young_3, lower_bound_intrinsic_young_4, lower_bound_intrinsic_young_5)
+  )
+
+ggplot(Young_Manual_Phalangeal_Indices) +
+  geom_bar(aes(x = Autopod_Digit_Number, y = Mean), stat = 'identity', fill = 'magenta1') +
+  geom_errorbar(aes(x = Autopod_Digit_Number, ymin = Lower_Bound, ymax = Upper_Bound), width = 0.4) +
+  geom_hline(yintercept = 0) +
+  labs (y = "Slope (PI versus Embryonic Timepoint)", x = "") +
+  scale_x_discrete(labels=c("DIGIT 1", "DIGIT 2", "DIGIT 3", "DIGIT 4", "DIGIT 5")) +
+  ggtitle ("Human Manual Digits") + 
+  theme(plot.title = element_text(face = "bold")) +
+  theme(axis.text.x = element_text(face = "bold")) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+Young_Pedal_Phalangeal_Indices <- data.frame(Autopod_Digit_Number = c("PEDAL DIGIT 1", "PEDAL DIGIT 2", "PEDAL DIGIT 3", "PEDAL DIGIT 4", "PEDAL DIGIT 5"),
+  Mean = c(mean_intrinsic_young_6, mean_intrinsic_young_7, mean_intrinsic_young_8, mean_intrinsic_young_9, mean_intrinsic_young_10),
+  Upper_Bound = c(upper_bound_intrinsic_young_6, upper_bound_intrinsic_young_7, upper_bound_intrinsic_young_8, upper_bound_intrinsic_young_9, upper_bound_intrinsic_young_10),
+  Lower_Bound = c(lower_bound_intrinsic_young_6, lower_bound_intrinsic_young_7, lower_bound_intrinsic_young_8, lower_bound_intrinsic_young_9, lower_bound_intrinsic_young_10)
+  )
+
+ggplot(Young_Pedal_Phalangeal_Indices) +
+  geom_bar(aes(x = Autopod_Digit_Number, y = Mean), stat = 'identity', fill = 'magenta3') +
+  geom_errorbar(aes(x = Autopod_Digit_Number, ymin = Lower_Bound, ymax = Upper_Bound), width = 0.4) +
+  geom_hline(yintercept = 0) +
+  labs (y = "Slope (PI versus Embryonic Timepoint", x = "") +
+    scale_x_discrete(labels=c("DIGIT 1", "DIGIT 2", "DIGIT 3", "DIGIT 4", "DIGIT 5")) +
+  ggtitle ("Human Pedal Digits") + 
+  theme(plot.title = element_text(face = "bold")) +
+  theme(axis.text.x = element_text(face = "bold")) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Manual PI Table
+  # Adding Digit Names
+Young_Manual_Phalangeal_Indices$Digit_Number <- c("Digit 1", "Digit 2", "Digit 3", "Digit 4", "Digit 5")
+Young_Manual_Phalangeal_Indices <- Young_Manual_Phalangeal_Indices[, c(5,1,2,3,4)]
+  # Removing Unnecessary Columns
+Young_Manual_Phalangeal_Indices <- Young_Manual_Phalangeal_Indices[,-c(2)]
+  # Renaming a Column
+colnames(Young_Manual_Phalangeal_Indices)[2] ="Slope"
+  # Extracting T-Value
+Young_Manual_Phalangeal_Indices$T_Value <- c(t_value_intrinsic_young_1, t_value_intrinsic_young_2, t_value_intrinsic_young_3, t_value_intrinsic_young_4, t_value_intrinsic_young_5)
+  # Extracting P-Values
+Young_Manual_Phalangeal_Indices$P_Value <- c(p_value_intrinsic_young_1_human, p_value_intrinsic_young_2_human, p_value_intrinsic_young_3_human, p_value_intrinsic_young_4_human, p_value_intrinsic_young_5_human)
+
+# Pedal PI Table
+  # Adding Digit Names
+Young_Pedal_Phalangeal_Indices$Digit_Number <- c("Digit 1", "Digit 2", "Digit 3", "Digit 4", "Digit 5")
+Young_Pedal_Phalangeal_Indices <- Young_Pedal_Phalangeal_Indices[, c(5,1,2,3,4)]
+  # Removing Unnecessary Columns
+Young_Pedal_Phalangeal_Indices <- Young_Pedal_Phalangeal_Indices[,-c(2)]
+  # Renaming a Column
+colnames(Young_Pedal_Phalangeal_Indices)[2] ="Slope"
+  # Extracting T-Value
+Young_Pedal_Phalangeal_Indices$T_Value <- c(t_value_intrinsic_young_6, t_value_intrinsic_young_7, t_value_intrinsic_young_8, t_value_intrinsic_young_9, t_value_intrinsic_young_10)
+  # Extracting P-Values
+Young_Pedal_Phalangeal_Indices$P_Value <- c(p_value_intrinsic_young_6_human, p_value_intrinsic_young_7_human, p_value_intrinsic_young_8_human, p_value_intrinsic_young_9_human, p_value_intrinsic_young_10_human)
+
+# Saving Tables as Human-Specific
+Human_Manual_Phalangeal_Indices <- Young_Manual_Phalangeal_Indices
+Human_Pedal_Phalangeal_Indices <- Young_Pedal_Phalangeal_Indices
+```
+
+## Extrinsic Measure - Human
+```{r}
+# Extrinsic Measure: Ontogenetic Allometry of Metapodial and Phalangeal Lengths [RECREATION OF FIGURE 4 in Druelle et. al (2018)]
+  # The study used bivariate log-log regression of the individual digit ray bone lengths on total body mass. The slopes were compared to the isometric expectation of "0.333" for length v. mass. For this current version of the R script I will be examining the Metapodial and Phalangeal Lengths in respect to the Crown-rump Length, the scaling exponent for this will be "1.000".
+
+# Formatting the Data - For Graphs (Mean & SD)
+  # Hand Metapodials
+model_extrinsic_druelle_1 = lm(HM1_z_score ~ Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_2 = lm(HM2_z_score ~ Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_3 = lm(HM3_z_score ~ Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_4 = lm(HM4_z_score ~ Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_5 = lm(HM5_z_score ~ Crown_rump_length, data = human_autopod_data_z_score)
+  # Hand Phalanges
+model_extrinsic_druelle_6 = lm(HP1_z_score ~ Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_7 = lm(HP2_z_score ~ Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_8 = lm(HP3_z_score ~ Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_9 = lm(HP4_z_score ~ Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_10 = lm(HP5_z_score ~ Crown_rump_length, data = human_autopod_data_z_score)
+  # Foot Metapodials
+model_extrinsic_druelle_11 = lm(FM1_z_score ~ Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_12 = lm(FM2_z_score ~ Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_13 = lm(FM3_z_score ~ Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_14 = lm(FM4_z_score ~ Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_15 = lm(FM5_z_score ~ Crown_rump_length, data = human_autopod_data_z_score)
+  # Foot Phalanges
+model_extrinsic_druelle_16 = lm(FP1_z_score ~ Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_17 = lm(FP2_z_score ~ Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_18 = lm(FP3_z_score ~ Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_19 = lm(FP4_z_score ~ Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_20 = lm(FP5_z_score ~ Crown_rump_length, data = human_autopod_data_z_score)
+
+# Formatting the Data - Setting Null = 1.00 for 1D-1D Scaling (For T-Value & P-Value)
+  # Hand Metapodials
+model_extrinsic_druelle_1_offset = lm(HM1_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_2_offset = lm(HM2_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_3_offset = lm(HM3_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_4_offset = lm(HM4_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_5_offset = lm(HM5_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = human_autopod_data_z_score)
+  # Hand Phalanges
+model_extrinsic_druelle_6_offset = lm(HP1_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_7_offset = lm(HP2_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_8_offset = lm(HP3_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_9_offset = lm(HP4_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_10_offset = lm(HP5_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = human_autopod_data_z_score)
+  # Foot Metapodials
+model_extrinsic_druelle_11_offset = lm(FM1_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_12_offset = lm(FM2_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_13_offset = lm(FM3_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_14_offset = lm(FM4_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_15_offset = lm(FM5_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = human_autopod_data_z_score)
+  # Foot Phalanges
+model_extrinsic_druelle_16_offset = lm(FP1_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_17_offset = lm(FP2_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_18_offset = lm(FP3_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_19_offset = lm(FP4_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = human_autopod_data_z_score)
+model_extrinsic_druelle_20_offset = lm(FP5_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = human_autopod_data_z_score)
+
+# Extracting the Numbers
+m = summary(model_extrinsic_druelle_1)
+  mean_extrinsic_druelle_1 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_1 <- confint(model_extrinsic_druelle_1, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_1 <- confint(model_extrinsic_druelle_1, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_1_offset)  
+  t_value_extrinsic_druelle_1 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_1_human <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_2)
+  mean_extrinsic_druelle_2 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_2 <- confint(model_extrinsic_druelle_2, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_2 <- confint(model_extrinsic_druelle_2, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_2_offset)  
+  t_value_extrinsic_druelle_2 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_2_human <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_3)
+  mean_extrinsic_druelle_3 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_3 <- confint(model_extrinsic_druelle_3, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_3 <- confint(model_extrinsic_druelle_3, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_3_offset)  
+  t_value_extrinsic_druelle_3 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_3_human <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_4)
+  mean_extrinsic_druelle_4 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_4 <- confint(model_extrinsic_druelle_4, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_4 <- confint(model_extrinsic_druelle_4, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_4_offset)  
+  t_value_extrinsic_druelle_4 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_4_human <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_5)
+  mean_extrinsic_druelle_5 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_5 <- confint(model_extrinsic_druelle_5, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_5 <- confint(model_extrinsic_druelle_5, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_5_offset)  
+  t_value_extrinsic_druelle_5 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_5_human <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_6)
+  mean_extrinsic_druelle_6 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_6 <- confint(model_extrinsic_druelle_6, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_6 <- confint(model_extrinsic_druelle_6, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_6_offset)  
+  t_value_extrinsic_druelle_6 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_6_human <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_7)
+  mean_extrinsic_druelle_7 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_7 <- confint(model_extrinsic_druelle_7, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_7 <- confint(model_extrinsic_druelle_7, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_7_offset)  
+  t_value_extrinsic_druelle_7 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_7_human <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_8)
+  mean_extrinsic_druelle_8 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_8 <- confint(model_extrinsic_druelle_8, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_8 <- confint(model_extrinsic_druelle_8, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_8_offset)  
+  t_value_extrinsic_druelle_8 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_8_human <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_9)
+  mean_extrinsic_druelle_9 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_9 <- confint(model_extrinsic_druelle_9, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_9 <- confint(model_extrinsic_druelle_9, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_9_offset)  
+  t_value_extrinsic_druelle_9 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_9_human <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_10)
+  mean_extrinsic_druelle_10 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_10 <- confint(model_extrinsic_druelle_10, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_10 <- confint(model_extrinsic_druelle_10, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_10_offset)  
+  t_value_extrinsic_druelle_10 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_10_human <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_11)
+  mean_extrinsic_druelle_11 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_11 <- confint(model_extrinsic_druelle_11, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_11 <- confint(model_extrinsic_druelle_11, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_11_offset)  
+  t_value_extrinsic_druelle_11 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_11_human <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_12)
+  mean_extrinsic_druelle_12 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_12 <- confint(model_extrinsic_druelle_12, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_12 <- confint(model_extrinsic_druelle_12, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_12_offset)  
+  t_value_extrinsic_druelle_12 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_12_human <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_13)
+  mean_extrinsic_druelle_13 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_13 <- confint(model_extrinsic_druelle_13, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_13 <- confint(model_extrinsic_druelle_13, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_13_offset)  
+  t_value_extrinsic_druelle_13 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_13_human <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_14)
+  mean_extrinsic_druelle_14 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_14 <- confint(model_extrinsic_druelle_14, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_14 <- confint(model_extrinsic_druelle_14, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_14_offset)  
+  t_value_extrinsic_druelle_14 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_14_human <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_15)
+  mean_extrinsic_druelle_15 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_15 <- confint(model_extrinsic_druelle_15, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_15 <- confint(model_extrinsic_druelle_15, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_15_offset)  
+  t_value_extrinsic_druelle_15 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_15_human <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_16)
+  mean_extrinsic_druelle_16 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_16 <- confint(model_extrinsic_druelle_16, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_16 <- confint(model_extrinsic_druelle_16, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_16_offset)  
+  t_value_extrinsic_druelle_16 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_16_human <- n$coefficients[2,4]
+
+m = summary(model_extrinsic_druelle_17)
+  mean_extrinsic_druelle_17 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_17 <- confint(model_extrinsic_druelle_17, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_17 <- confint(model_extrinsic_druelle_17, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_17_offset)  
+  t_value_extrinsic_druelle_17 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_17_human <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_18)
+  mean_extrinsic_druelle_18 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_18 <- confint(model_extrinsic_druelle_18, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_18 <- confint(model_extrinsic_druelle_18, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_18_offset)  
+  t_value_extrinsic_druelle_18 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_18_human <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_19)
+  mean_extrinsic_druelle_19 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_19 <- confint(model_extrinsic_druelle_19, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_19 <- confint(model_extrinsic_druelle_19, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_19_offset)  
+  t_value_extrinsic_druelle_19 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_19_human <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_20)
+  mean_extrinsic_druelle_20 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_20 <- confint(model_extrinsic_druelle_20, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_20 <- confint(model_extrinsic_druelle_20, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_20_offset)  
+  t_value_extrinsic_druelle_20 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_20_human <- n$coefficients[2,4]
+```
+
+## Ontogenetic Allometry Graphs - Human
+```{r}
+# Formatting the Data for Tidyverse
+# Renaming
+human_autopod_data_extrinsic_graph <- human_autopod_data_z_score %>% 
+        rename("HP1" = "HP1_z_score",
+               "HP2" = "HP2_z_score",
+               "HP3" = "HP3_z_score",
+               "HP4" = "HP4_z_score",
+               "HP5" = "HP5_z_score",
+               "HM1" = "HM1_z_score",
+               "HM2" = "HM2_z_score",
+               "HM3" = "HM3_z_score",
+               "HM4" = "HM4_z_score",
+               "HM5" = "HM5_z_score",
+               "FP1" = "FP1_z_score",
+               "FP2" = "FP2_z_score",
+               "FP3" = "FP3_z_score",
+               "FP4" = "FP4_z_score",
+               "FP5" = "FP5_z_score",
+               "FM1" = "FM1_z_score",
+               "FM2" = "FM2_z_score",
+               "FM3" = "FM3_z_score",
+               "FM4" = "FM4_z_score",
+               "FM5" = "FM5_z_score")
+  # Tidyverse
+human_measurements <- colnames(human_autopod_data_extrinsic_graph)[8:27]
+human_autopod_data_tidy_z_score <- human_autopod_data_extrinsic_graph %>% pivot_longer(all_of(human_measurements), names_to = "measurement_id") %>% select(-notes) %>% select(-timepoint)
+
+# Facet-Wrap() for Ontogenetic Allometry
+ggplot(data = human_autopod_data_tidy_z_score, aes(Crown_rump_length, value)) +
+  geom_point(color = "magenta") + 
+  labs(title = "Human Allometry",
+       y = "Z-score Transformed Length", x = "Z-score Transformed Crown-rump Length") + 
+  facet_wrap(~ measurement_id, nrow = 4)  + stat_smooth(method = 'lm', formula = y ~ x, geom = "smooth", color = "magenta")
+```
+
+## Summation Plots & Tables of Extrinsic Measurements - Human
+```{r}
+# Manual Digits Ontogenetic Allometry Plot
+Druelle_Manual_Comparison_to_CRL <- data.frame(Mean = c(mean_extrinsic_druelle_1, mean_extrinsic_druelle_6, mean_extrinsic_druelle_2, mean_extrinsic_druelle_7, mean_extrinsic_druelle_3, mean_extrinsic_druelle_8, mean_extrinsic_druelle_4, mean_extrinsic_druelle_9, mean_extrinsic_druelle_5, mean_extrinsic_druelle_10),
+  Lower_Bound = c(lower_bound_extrinsic_druelle_1, lower_bound_extrinsic_druelle_6, lower_bound_extrinsic_druelle_2, lower_bound_extrinsic_druelle_7, lower_bound_extrinsic_druelle_3, lower_bound_extrinsic_druelle_8, lower_bound_extrinsic_druelle_4, lower_bound_extrinsic_druelle_9, lower_bound_extrinsic_druelle_5, lower_bound_extrinsic_druelle_10),
+  Upper_Bound = c(upper_bound_extrinsic_druelle_1, upper_bound_extrinsic_druelle_6, upper_bound_extrinsic_druelle_2, upper_bound_extrinsic_druelle_7, upper_bound_extrinsic_druelle_3, upper_bound_extrinsic_druelle_8, upper_bound_extrinsic_druelle_4, upper_bound_extrinsic_druelle_9, upper_bound_extrinsic_druelle_5, upper_bound_extrinsic_druelle_10),
+  Autopod_Type = rep(c("Metapodial", "Phalange"), 5),
+  grp = c(rep("DIGIT 1", 2),rep("DIGIT 2", 2),rep("DIGIT 3", 2),rep("DIGIT 4", 2),rep("DIGIT 5", 2))
+  )
+
+Druelle_Manual_Comparison_to_CRL %>%
+ggplot(aes(x = grp, y = Mean, groups = Autopod_Type, fill = Autopod_Type)) +
+  stat_summary(fun = mean, geom = "bar", position = position_dodge()) +
+geom_errorbar(aes(ymin = Lower_Bound, ymax = Upper_Bound), width = 0.2, position = position_dodge(0.9)) +
+  geom_hline(yintercept = 1) +
+  labs (y = "Scaling Exponent", x = "", fill = "Autopod Type") +
+  ggtitle ("Human Manual Digits") +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(axis.text.x = element_text(face = "bold")) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_y_continuous(expand=c(0,0))
+
+# Pedal Digits Ontogenetic Allometry Plot
+Druelle_Pedal_Comparison_to_CRL <- data.frame(Mean = c(mean_extrinsic_druelle_11, mean_extrinsic_druelle_16, mean_extrinsic_druelle_12, mean_extrinsic_druelle_17, mean_extrinsic_druelle_13, mean_extrinsic_druelle_18, mean_extrinsic_druelle_14, mean_extrinsic_druelle_19, mean_extrinsic_druelle_15, mean_extrinsic_druelle_20),
+  Lower_Bound = c(lower_bound_extrinsic_druelle_11, lower_bound_extrinsic_druelle_16, lower_bound_extrinsic_druelle_12, lower_bound_extrinsic_druelle_17, lower_bound_extrinsic_druelle_13, lower_bound_extrinsic_druelle_18, lower_bound_extrinsic_druelle_14, lower_bound_extrinsic_druelle_19, lower_bound_extrinsic_druelle_15, lower_bound_extrinsic_druelle_20),
+  Upper_Bound = c(upper_bound_extrinsic_druelle_11, upper_bound_extrinsic_druelle_16, upper_bound_extrinsic_druelle_12, upper_bound_extrinsic_druelle_17, upper_bound_extrinsic_druelle_13, upper_bound_extrinsic_druelle_18, upper_bound_extrinsic_druelle_14, upper_bound_extrinsic_druelle_19, upper_bound_extrinsic_druelle_15, upper_bound_extrinsic_druelle_20),
+  Autopod_Type = rep(c("Metapodial", "Phalange"), 5),
+  grp = c(rep("DIGIT 1", 2),rep("DIGIT 2", 2),rep("DIGIT 3", 2),rep("DIGIT 4", 2),rep("DIGIT 5", 2))
+  )
+
+Druelle_Pedal_Comparison_to_CRL %>%
+ggplot(aes(x = grp, y = Mean, groups = Autopod_Type, fill = Autopod_Type)) +
+  stat_summary(fun = mean, geom = "bar", position = position_dodge()) +
+geom_errorbar(aes(ymin = Lower_Bound, ymax = Upper_Bound), width = 0.2, position = position_dodge(0.9)) +
+  geom_hline(yintercept = 1) +
+  labs (y = "Scaling Exponent", x = "", fill = "Autopod Type") +
+  ggtitle ("Human Pedal Digits") +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(axis.text.x = element_text(face = "bold")) + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_y_continuous(expand=c(0,0))
+
+# Ontogenetic Allometry Table
+  # Manual Digits Table 
+    # Adding Autopod Element Names
+Druelle_Manual_Comparison_to_CRL$Autopod_Element <- c("Metapodial 1", "Phalange 1", "Metapodial 2", "Phalange 2", "Metapodial 3", "Phalange 3", "Metapodial 4", "Phalange 4", "Metapodial 5", "Phalange 5")
+Druelle_Manual_Comparison_to_CRL <- Druelle_Manual_Comparison_to_CRL[, c(6,1,2,3,4,5)]
+    # Subtracting Unnecessary Columns
+Druelle_Manual_Comparison_to_CRL <- Druelle_Manual_Comparison_to_CRL[,-c(5,6)]
+    # Extracting T-Value
+Druelle_Manual_Comparison_to_CRL$T_Value <- c(t_value_extrinsic_druelle_1, t_value_extrinsic_druelle_6, t_value_extrinsic_druelle_2,
+t_value_extrinsic_druelle_7, t_value_extrinsic_druelle_3,
+t_value_extrinsic_druelle_8, t_value_extrinsic_druelle_4,
+t_value_extrinsic_druelle_9, t_value_extrinsic_druelle_5,
+t_value_extrinsic_druelle_10)
+    # Extracting P-Value
+Druelle_Manual_Comparison_to_CRL$P_Value <- c(p_value_extrinsic_druelle_1_human, p_value_extrinsic_druelle_6_human, p_value_extrinsic_druelle_2_human,
+p_value_extrinsic_druelle_7_human, p_value_extrinsic_druelle_3_human,
+p_value_extrinsic_druelle_8_human, p_value_extrinsic_druelle_4_human,
+p_value_extrinsic_druelle_9_human, p_value_extrinsic_druelle_5_human,
+p_value_extrinsic_druelle_10_human)
+
+  # Pedal Digits Table 
+    # Adding Autopod Element Names
+Druelle_Pedal_Comparison_to_CRL$Autopod_Element <- c("Metapodial 1", "Phalange 1", "Metapodial 2", "Phalange 2", "Metapodial 3", "Phalange 3", "Metapodial 4", "Phalange 4", "Metapodial 5", "Phalange 5")
+Druelle_Pedal_Comparison_to_CRL <- Druelle_Pedal_Comparison_to_CRL[, c(6,1,2,3,4,5)]
+    # Subtracting Unnecessary Columns
+Druelle_Pedal_Comparison_to_CRL <- Druelle_Pedal_Comparison_to_CRL[,-c(5,6)]
+    # Extracting R-Squared Value
+Druelle_Pedal_Comparison_to_CRL$T_Value <- c(t_value_extrinsic_druelle_11, t_value_extrinsic_druelle_16, t_value_extrinsic_druelle_12,
+t_value_extrinsic_druelle_17, t_value_extrinsic_druelle_13,
+t_value_extrinsic_druelle_18, t_value_extrinsic_druelle_14,
+t_value_extrinsic_druelle_19, t_value_extrinsic_druelle_15,
+t_value_extrinsic_druelle_20)
+    # Extracting P-Value
+Druelle_Pedal_Comparison_to_CRL$P_Value <- c(p_value_extrinsic_druelle_11_human, p_value_extrinsic_druelle_16_human, p_value_extrinsic_druelle_12_human, 
+p_value_extrinsic_druelle_17_human, p_value_extrinsic_druelle_13_human,
+p_value_extrinsic_druelle_18_human, p_value_extrinsic_druelle_14_human,
+p_value_extrinsic_druelle_19_human, p_value_extrinsic_druelle_15_human,
+p_value_extrinsic_druelle_20_human)
+
+# Saving Tables as Human-Specific
+Human_Manual_Comparison_to_CRL <- Druelle_Manual_Comparison_to_CRL
+Human_Pedal_Comparison_to_CRL <- Druelle_Pedal_Comparison_to_CRL
+```
+
+## Linear Regression Assumptions - Human
+```{r}
+# Manual_1
+  # 1.) Linear Relationship
+plot(human_autopod_data_intrinsic$timepoint, human_autopod_data_intrinsic$HUMAN_MANUAL_DIGIT_1)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_intrinsic_young_1)
+    # Look only at "Fitted Residuals" and "Normal Q-Q"
+
+# Manual_2
+# 1.) Linear Relationship
+plot(human_autopod_data_intrinsic$timepoint, human_autopod_data_intrinsic$HUMAN_MANUAL_DIGIT_2)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_intrinsic_young_2)
+
+# Manual_3
+# 1.) Linear Relationship
+plot(human_autopod_data_intrinsic$timepoint, human_autopod_data_intrinsic$HUMAN_MANUAL_DIGIT_3)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_intrinsic_young_3)
+
+# Manual_4
+# 1.) Linear Relationship
+plot(human_autopod_data_intrinsic$timepoint, human_autopod_data_intrinsic$HUMAN_MANUAL_DIGIT_4)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_intrinsic_young_4)
+
+# Manual_5
+# 1.) Linear Relationship
+plot(human_autopod_data_intrinsic$timepoint, human_autopod_data_intrinsic$HUMAN_MANUAL_DIGIT_5)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_intrinsic_young_5)
+
+# Pedal_1
+# 1.) Linear Relationship
+plot(human_autopod_data_intrinsic$timepoint, human_autopod_data_intrinsic$HUMAN_PEDAL_DIGIT_1)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_intrinsic_young_6)
+
+# Pedal_2
+# 1.) Linear Relationship
+plot(human_autopod_data_intrinsic$timepoint, human_autopod_data_intrinsic$HUMAN_PEDAL_DIGIT_2)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_intrinsic_young_7)
+
+# Pedal_3
+# 1.) Linear Relationship
+plot(human_autopod_data_intrinsic$timepoint, human_autopod_data_intrinsic$HUMAN_PEDAL_DIGIT_3)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_intrinsic_young_8)
+
+# Pedal_4
+# 1.) Linear Relationship
+plot(human_autopod_data_intrinsic$timepoint, human_autopod_data_intrinsic$HUMAN_PEDAL_DIGIT_4)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_intrinsic_young_9)
+
+# Pedal_5
+# 1.) Linear Relationship
+plot(human_autopod_data_intrinsic$timepoint, human_autopod_data_intrinsic$HUMAN_PEDAL_DIGIT_5)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_intrinsic_young_10)
+
+# HM1
+# 1.) Linear Relationship
+plot(human_autopod_data_z_score$Crown_rump_length, human_autopod_data_z_score$HM1_z_score)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_1)
+
+# HM2
+# 1.) Linear Relationship
+plot(human_autopod_data_z_score$Crown_rump_length, human_autopod_data_z_score$HM2_z_score)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_2)
+
+# HM3
+# 1.) Linear Relationship
+plot(human_autopod_data_z_score$Crown_rump_length, human_autopod_data_z_score$HM3_z_score)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_3)
+
+# HM4
+# 1.) Linear Relationship
+plot(human_autopod_data_z_score$Crown_rump_length, human_autopod_data_z_score$HM4_z_score)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_4)
+
+# HM5
+# 1.) Linear Relationship
+plot(human_autopod_data_z_score$Crown_rump_length, human_autopod_data_z_score$HM5_z_score)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_5)
+
+# HP1
+# 1.) Linear Relationship
+plot(human_autopod_data_z_score$Crown_rump_length, human_autopod_data_z_score$HP1_z_score)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_6)
+
+# HP2
+# 1.) Linear Relationship
+plot(human_autopod_data_z_score$Crown_rump_length, human_autopod_data_z_score$HP2_z_score)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_7)
+
+# HP3
+# 1.) Linear Relationship
+plot(human_autopod_data_z_score$Crown_rump_length, human_autopod_data_z_score$HP3_z_score)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_8)
+
+# HP4
+# 1.) Linear Relationship
+plot(human_autopod_data_z_score$Crown_rump_length, human_autopod_data_z_score$HP4_z_score)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_9)
+
+# HP5
+# 1.) Linear Relationship
+plot(human_autopod_data_z_score$Crown_rump_length, human_autopod_data_z_score$HP5_z_score)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_10)
+
+# FM1
+# 1.) Linear Relationship
+plot(human_autopod_data_z_score$Crown_rump_length, human_autopod_data_z_score$FM1_z_score)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_11)
+
+# FM2
+# 1.) Linear Relationship
+plot(human_autopod_data_z_score$Crown_rump_length, human_autopod_data_z_score$FM2_z_score)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_12)
+
+# FM3
+# 1.) Linear Relationship
+plot(human_autopod_data_z_score$Crown_rump_length, human_autopod_data_z_score$FM3_z_score)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_13)
+
+# FM4
+# 1.) Linear Relationship
+plot(human_autopod_data_z_score$Crown_rump_length, human_autopod_data_z_score$FM4_z_score)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_14)
+
+# FM5
+# 1.) Linear Relationship
+plot(human_autopod_data_z_score$Crown_rump_length, human_autopod_data_z_score$FM5_z_score)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_15)
+
+# FP1
+# 1.) Linear Relationship
+plot(human_autopod_data_z_score$Crown_rump_length, human_autopod_data_z_score$FP1_z_score)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_16)
+
+# FP2
+# 1.) Linear Relationship
+plot(human_autopod_data_z_score$Crown_rump_length, human_autopod_data_z_score$FP2_z_score)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_17)
+
+# FP3
+# 1.) Linear Relationship
+plot(human_autopod_data_z_score$Crown_rump_length, human_autopod_data_z_score$FP3_z_score)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_18)
+
+# FP4
+# 1.) Linear Relationship
+plot(human_autopod_data_z_score$Crown_rump_length, human_autopod_data_z_score$FP4_z_score)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_19)
+
+# FP5
+# 1.) Linear Relationship
+plot(human_autopod_data_z_score$Crown_rump_length, human_autopod_data_z_score$FP5_z_score)
+# 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_20)
+```
+
+## Z-Scores - Mouse
+```{r}
+## Z-Scores
+mouse_autopod_data_z_score <- mouse_autopod_data_avg[1:6]
+
+mouse_autopod_data_z_score$Crown_rump_length <- (mouse_autopod_data_avg$Crown_rump_length - mean(mouse_autopod_data_avg$Crown_rump_length)) / sd(mouse_autopod_data_avg$Crown_rump_length)
+
+mouse_autopod_data_z_score$HP1_z_score <- (mouse_autopod_data_avg$HP1_avg - mean(mouse_autopod_data_avg$HP1_avg)) / sd(mouse_autopod_data_avg$HP1_avg)
+mouse_autopod_data_z_score$HP2_z_score <- (mouse_autopod_data_avg$HP2_avg - mean(mouse_autopod_data_avg$HP2_avg)) / sd(mouse_autopod_data_avg$HP2_avg)
+mouse_autopod_data_z_score$HP3_z_score <- (mouse_autopod_data_avg$HP3_avg - mean(mouse_autopod_data_avg$HP3_avg)) / sd(mouse_autopod_data_avg$HP3_avg)
+mouse_autopod_data_z_score$HP4_z_score <- (mouse_autopod_data_avg$HP4_avg - mean(mouse_autopod_data_avg$HP4_avg)) / sd(mouse_autopod_data_avg$HP4_avg)
+mouse_autopod_data_z_score$HP5_z_score <- (mouse_autopod_data_avg$HP5_avg - mean(mouse_autopod_data_avg$HP5_avg)) / sd(mouse_autopod_data_avg$HP5_avg)
+
+mouse_autopod_data_z_score$HM1_z_score <- (mouse_autopod_data_avg$HM1_avg - mean(mouse_autopod_data_avg$HM1_avg)) / sd(mouse_autopod_data_avg$HM1_avg)
+mouse_autopod_data_z_score$HM2_z_score <- (mouse_autopod_data_avg$HM2_avg - mean(mouse_autopod_data_avg$HM2_avg)) / sd(mouse_autopod_data_avg$HM2_avg)
+mouse_autopod_data_z_score$HM3_z_score <- (mouse_autopod_data_avg$HM3_avg - mean(mouse_autopod_data_avg$HM3_avg)) / sd(mouse_autopod_data_avg$HM3_avg)
+mouse_autopod_data_z_score$HM4_z_score <- (mouse_autopod_data_avg$HM4_avg - mean(mouse_autopod_data_avg$HM4_avg)) / sd(mouse_autopod_data_avg$HM4_avg)
+mouse_autopod_data_z_score$HM5_z_score <- (mouse_autopod_data_avg$HM5_avg - mean(mouse_autopod_data_avg$HM5_avg)) / sd(mouse_autopod_data_avg$HM5_avg)
+
+mouse_autopod_data_z_score$FP1_z_score <- (mouse_autopod_data_avg$FP1_avg - mean(mouse_autopod_data_avg$FP1_avg)) / sd(mouse_autopod_data_avg$FP1_avg)
+mouse_autopod_data_z_score$FP2_z_score <- (mouse_autopod_data_avg$FP2_avg - mean(mouse_autopod_data_avg$FP2_avg)) / sd(mouse_autopod_data_avg$FP2_avg)
+mouse_autopod_data_z_score$FP3_z_score <- (mouse_autopod_data_avg$FP3_avg - mean(mouse_autopod_data_avg$FP3_avg)) / sd(mouse_autopod_data_avg$FP3_avg)
+mouse_autopod_data_z_score$FP4_z_score <- (mouse_autopod_data_avg$FP4_avg - mean(mouse_autopod_data_avg$FP4_avg)) / sd(mouse_autopod_data_avg$FP4_avg)
+mouse_autopod_data_z_score$FP5_z_score <- (mouse_autopod_data_avg$FP5_avg - mean(mouse_autopod_data_avg$FP5_avg)) / sd(mouse_autopod_data_avg$FP5_avg)
+
+mouse_autopod_data_z_score$FM1_z_score <- (mouse_autopod_data_avg$FM1_avg - mean(mouse_autopod_data_avg$FM1_avg)) / sd(mouse_autopod_data_avg$FM1_avg)
+mouse_autopod_data_z_score$FM2_z_score <- (mouse_autopod_data_avg$FM2_avg - mean(mouse_autopod_data_avg$FM2_avg)) / sd(mouse_autopod_data_avg$FM2_avg)
+mouse_autopod_data_z_score$FM3_z_score <- (mouse_autopod_data_avg$FM3_avg - mean(mouse_autopod_data_avg$FM3_avg)) / sd(mouse_autopod_data_avg$FM3_avg)
+mouse_autopod_data_z_score$FM4_z_score <- (mouse_autopod_data_avg$FM4_avg - mean(mouse_autopod_data_avg$FM4_avg)) / sd(mouse_autopod_data_avg$FM4_avg)
+mouse_autopod_data_z_score$FM5_z_score <- (mouse_autopod_data_avg$FM5_avg - mean(mouse_autopod_data_avg$FM5_avg)) / sd(mouse_autopod_data_avg$FM5_avg)
+```
+
+## Growth Curves - Mouse
+```{r}
+# Facet_Wrap for Mouse Growth Curves by Elements
+ggplot(data = mouse_autopod_data_tidy_merged_avg, aes(timepoint, value)) +
+  geom_point(color="gold") + 
+  labs(y = "Length (mm)", x = "Embyronic Timepoint (Day)") + 
+  facet_wrap(~ element, nrow = 4)  + stat_smooth(method = 'lm', formula = y ~ x, geom = "smooth", color="gold")
+
+# Facet_Wrap for Mouse Growth Curves by Elements & Sex
+ggplot(data = mouse_autopod_data_tidy_merged_avg, aes(timepoint, value, color = sex)) +
+  geom_point() + 
+  labs(y = "Length (mm)", x = "Embyronic Timepoint (Day)",
+       color = "Sex") + 
+  facet_wrap(~ element, nrow = 4) + stat_smooth(method = 'lm', formula = y ~ x, geom = "smooth")
+```
+
+## Intrinsic Measure - Mouse
+```{r}
+# Intrinsic Measure: Ontogenetic Scaling of Manual and Pedal Phalangeal Indices [RECREATION OF FIGURES 5 & 6]
+  # In terms of the ontogenetic scaling for this paper, Young focuses on comparing the Phalangeal Indices in comparison to Relative Age. For this R script I just decided to stick with comparing the Phalangeal Indices in comparison to the Actual Age also known as the Embryonic Day in this comparison.
+
+  # The formula for the this version of the "Phalangeal Index" is:
+    # Phalangeal Index = (Length of a Ray's Phalanges)/(Length of a Ray's Metapodial)
+
+  # Formatting the Data
+mouse_autopod_data_intrinsic <- mouse_autopod_data_avg[1:7]
+
+mouse_autopod_data_intrinsic$MOUSE_MANUAL_DIGIT_1 <- ((mouse_autopod_data_avg$HP1_avg/mouse_autopod_data_avg$HM1_avg))
+mouse_autopod_data_intrinsic$MOUSE_MANUAL_DIGIT_2 <- ((mouse_autopod_data_avg$HP2_avg/mouse_autopod_data_avg$HM2_avg))
+mouse_autopod_data_intrinsic$MOUSE_MANUAL_DIGIT_3 <- ((mouse_autopod_data_avg$HP3_avg/mouse_autopod_data_avg$HM3_avg))
+mouse_autopod_data_intrinsic$MOUSE_MANUAL_DIGIT_4 <- ((mouse_autopod_data_avg$HP4_avg/mouse_autopod_data_avg$HM4_avg))
+mouse_autopod_data_intrinsic$MOUSE_MANUAL_DIGIT_5 <- ((mouse_autopod_data_avg$HP5_avg/mouse_autopod_data_avg$HM5_avg))
+
+mouse_autopod_data_intrinsic$MOUSE_PEDAL_DIGIT_1 <- ((mouse_autopod_data_avg$FP1_avg/mouse_autopod_data_avg$FM1_avg))
+mouse_autopod_data_intrinsic$MOUSE_PEDAL_DIGIT_2 <- ((mouse_autopod_data_avg$FP2_avg/mouse_autopod_data_avg$FM2_avg))
+mouse_autopod_data_intrinsic$MOUSE_PEDAL_DIGIT_3 <- ((mouse_autopod_data_avg$FP3_avg/mouse_autopod_data_avg$FM3_avg))
+mouse_autopod_data_intrinsic$MOUSE_PEDAL_DIGIT_4 <- ((mouse_autopod_data_avg$FP4_avg/mouse_autopod_data_avg$FM4_avg))
+mouse_autopod_data_intrinsic$MOUSE_PEDAL_DIGIT_5 <- ((mouse_autopod_data_avg$FP5_avg/mouse_autopod_data_avg$FM5_avg))
+
+mouse_autopod_data_intrinsic$timepoint <- as.numeric(as.character(mouse_autopod_data_intrinsic$timepoint))
+
+# Making the Models
+    # Manual Digit 1 PI
+model_intrinsic_young_1 = lm(MOUSE_MANUAL_DIGIT_1 ~ timepoint, data = mouse_autopod_data_intrinsic)
+    # Manual Digit 2 PI
+model_intrinsic_young_2 = lm(MOUSE_MANUAL_DIGIT_2 ~ timepoint, data = mouse_autopod_data_intrinsic)
+    # Manual Digit 3 PI
+model_intrinsic_young_3 = lm(MOUSE_MANUAL_DIGIT_3 ~ timepoint, data = mouse_autopod_data_intrinsic)
+    # Manual Digit 4 PI
+model_intrinsic_young_4 = lm(MOUSE_MANUAL_DIGIT_4 ~ timepoint, data = mouse_autopod_data_intrinsic)
+    # Manual Digit 5 PI
+model_intrinsic_young_5 = lm(MOUSE_MANUAL_DIGIT_5 ~ timepoint, data = mouse_autopod_data_intrinsic)
+    # Pedal Digit 1 PI
+model_intrinsic_young_6 = lm(MOUSE_PEDAL_DIGIT_1 ~ timepoint, data = mouse_autopod_data_intrinsic)
+    # Pedal Digit 2 PI
+model_intrinsic_young_7 = lm(MOUSE_PEDAL_DIGIT_2 ~ timepoint, data = mouse_autopod_data_intrinsic)
+    # Pedal Digit 3 PI
+model_intrinsic_young_8 = lm(MOUSE_PEDAL_DIGIT_3 ~ timepoint, data = mouse_autopod_data_intrinsic)
+    # Pedal Digit 4 PI
+model_intrinsic_young_9 = lm(MOUSE_PEDAL_DIGIT_4 ~ timepoint, data = mouse_autopod_data_intrinsic)
+    # Pedal Digit 5 PI
+model_intrinsic_young_10 = lm(MOUSE_PEDAL_DIGIT_5 ~ timepoint, data = mouse_autopod_data_intrinsic)
+
+# Extracting Numbers
+m = summary(model_intrinsic_young_1)
+  mean_intrinsic_young_1 <- m$coefficients[2,1]
+  upper_bound_intrinsic_young_1 <- confint(model_intrinsic_young_1, "timepoint")[2]
+  lower_bound_intrinsic_young_1 <- confint(model_intrinsic_young_1, "timepoint")[1]
+  t_value_intrinsic_young_1 <- m$coefficients[2,3]
+  p_value_intrinsic_young_1_mouse <- m$coefficients[2,4]
+  
+m = summary(model_intrinsic_young_2)
+  mean_intrinsic_young_2 <- m$coefficients[2,1]
+  upper_bound_intrinsic_young_2 <- confint(model_intrinsic_young_2, "timepoint")[2]
+  lower_bound_intrinsic_young_2 <- confint(model_intrinsic_young_2, "timepoint")[1]
+  t_value_intrinsic_young_2 <- m$coefficients[2,3]
+  p_value_intrinsic_young_2_mouse <- m$coefficients[2,4]
+  
+m = summary(model_intrinsic_young_3)
+  mean_intrinsic_young_3 <- m$coefficients[2,1]
+  upper_bound_intrinsic_young_3 <- confint(model_intrinsic_young_3, "timepoint")[2]
+  lower_bound_intrinsic_young_3 <- confint(model_intrinsic_young_3, "timepoint")[1]
+  t_value_intrinsic_young_3 <- m$coefficients[2,3]
+  p_value_intrinsic_young_3_mouse <- m$coefficients[2,4]
+  
+m = summary(model_intrinsic_young_4)
+  mean_intrinsic_young_4 <- m$coefficients[2,1]
+  upper_bound_intrinsic_young_4 <- confint(model_intrinsic_young_4, "timepoint")[2]
+  lower_bound_intrinsic_young_4 <- confint(model_intrinsic_young_4, "timepoint")[1]
+  t_value_intrinsic_young_4 <- m$coefficients[2,3]
+  p_value_intrinsic_young_4_mouse <- m$coefficients[2,4]
+  
+m = summary(model_intrinsic_young_5)
+  mean_intrinsic_young_5 <- m$coefficients[2,1]
+  upper_bound_intrinsic_young_5 <- confint(model_intrinsic_young_5, "timepoint")[2]
+  lower_bound_intrinsic_young_5 <- confint(model_intrinsic_young_5, "timepoint")[1]
+  t_value_intrinsic_young_5 <- m$coefficients[2,3]
+  p_value_intrinsic_young_5_mouse <- m$coefficients[2,4]
+  
+m = summary(model_intrinsic_young_6)
+  mean_intrinsic_young_6 <- m$coefficients[2,1]
+  upper_bound_intrinsic_young_6 <- confint(model_intrinsic_young_6, "timepoint")[2]
+  lower_bound_intrinsic_young_6 <- confint(model_intrinsic_young_6, "timepoint")[1]
+  t_value_intrinsic_young_6 <- m$coefficients[2,3]
+  p_value_intrinsic_young_6_mouse <- m$coefficients[2,4]
+  
+m = summary(model_intrinsic_young_7)
+  mean_intrinsic_young_7 <- m$coefficients[2,1]
+  upper_bound_intrinsic_young_7 <- confint(model_intrinsic_young_7, "timepoint")[2]
+  lower_bound_intrinsic_young_7 <- confint(model_intrinsic_young_7, "timepoint")[1]
+  t_value_intrinsic_young_7 <- m$coefficients[2,3]
+  p_value_intrinsic_young_7_mouse <- m$coefficients[2,4]
+  
+m = summary(model_intrinsic_young_8)
+  mean_intrinsic_young_8 <- m$coefficients[2,1]
+  upper_bound_intrinsic_young_8 <- confint(model_intrinsic_young_8, "timepoint")[2]
+  lower_bound_intrinsic_young_8 <- confint(model_intrinsic_young_8, "timepoint")[1]
+  t_value_intrinsic_young_8 <- m$coefficients[2,3]
+  p_value_intrinsic_young_8_mouse <- m$coefficients[2,4]
+  
+m = summary(model_intrinsic_young_9)
+  mean_intrinsic_young_9 <- m$coefficients[2,1]
+  upper_bound_intrinsic_young_9 <- confint(model_intrinsic_young_9, "timepoint")[2]
+  lower_bound_intrinsic_young_9 <- confint(model_intrinsic_young_9, "timepoint")[1]
+  t_value_intrinsic_young_9 <- m$coefficients[2,3]
+  p_value_intrinsic_young_9_mouse <- m$coefficients[2,4]
+  
+m = summary(model_intrinsic_young_10)
+  mean_intrinsic_young_10 <- m$coefficients[2,1]
+  upper_bound_intrinsic_young_10 <- confint(model_intrinsic_young_10, "timepoint")[2]
+  lower_bound_intrinsic_young_10 <- confint(model_intrinsic_young_10, "timepoint")[1]
+  t_value_intrinsic_young_10 <- m$coefficients[2,3]
+  p_value_intrinsic_young_10_mouse <- m$coefficients[2,4]
+```
+
+## Ontogenetic Changes in Phalangeal Indices Graphs - Mouse
+```{r}
+# Formatting the Data for Tidyverse
+  # Renaming
+mouse_autopod_data_intrinsic_graph <- mouse_autopod_data_intrinsic %>% 
+        rename("MANUAL DIGIT 1" = "MOUSE_MANUAL_DIGIT_1",
+               "MANUAL DIGIT 2" = "MOUSE_MANUAL_DIGIT_2",
+               "MANUAL DIGIT 3" = "MOUSE_MANUAL_DIGIT_3",
+               "MANUAL DIGIT 4" = "MOUSE_MANUAL_DIGIT_4",
+               "MANUAL DIGIT 5" = "MOUSE_MANUAL_DIGIT_5",
+               "PEDAL DIGIT 1" = "MOUSE_PEDAL_DIGIT_1",
+               "PEDAL DIGIT 2" = "MOUSE_PEDAL_DIGIT_2",
+               "PEDAL DIGIT 3" = "MOUSE_PEDAL_DIGIT_3",
+               "PEDAL DIGIT 4" = "MOUSE_PEDAL_DIGIT_4",
+               "PEDAL DIGIT 5" = "MOUSE_PEDAL_DIGIT_5")
+  # Tidyverse
+mouse_measurements <- colnames(mouse_autopod_data_intrinsic_graph)[8:17]
+mouse_autopod_data_tidy_intrinsic <- mouse_autopod_data_intrinsic_graph %>% pivot_longer(all_of(mouse_measurements), names_to = "measurement_id")
+
+# Facet-Wrap() for Ontogenetic Changes in Phalangeal Indices
+ggplot(data = mouse_autopod_data_tidy_intrinsic, aes(timepoint, value)) +
+  geom_point(color="gold") + 
+  labs(y = "Phalangeal Indices", x = "Embryonic Timepoint (Day)") + 
+  facet_wrap(~ measurement_id, nrow = 2)  + stat_smooth(method = 'lm', formula = y ~ x, geom = "smooth", color="gold")
+```
+
+## Summation Plots & Tables of Intrinsic Measurements - Mouse
+```{r}
+Young_Manual_Phalangeal_Indices <- data.frame(Autopod_Digit_Number = c("MANUAL DIGIT 1","MANUAL DIGIT 2", "MANUAL DIGIT 3", "MANUAL DIGIT 4", "MANUAL DIGIT 5"),
+  Mean = c(mean_intrinsic_young_1, mean_intrinsic_young_2, mean_intrinsic_young_3, mean_intrinsic_young_4, mean_intrinsic_young_5),
+  Upper_Bound = c(upper_bound_intrinsic_young_1, upper_bound_intrinsic_young_2, upper_bound_intrinsic_young_3, upper_bound_intrinsic_young_4, upper_bound_intrinsic_young_5),
+  Lower_Bound = c(lower_bound_intrinsic_young_1, lower_bound_intrinsic_young_2, lower_bound_intrinsic_young_3, lower_bound_intrinsic_young_4, lower_bound_intrinsic_young_5)
+  )
+
+ggplot(Young_Manual_Phalangeal_Indices) +
+  geom_bar(aes(x = Autopod_Digit_Number, y = Mean), stat = 'identity', fill = 'gold1') +
+  geom_errorbar(aes(x = Autopod_Digit_Number, ymin = Lower_Bound, ymax = Upper_Bound), width = 0.4) +
+  geom_hline(yintercept = 0) +
+  labs (y = "Slope (PI versus Embryonic Timepoint)", x = "") +
+  scale_x_discrete(labels=c("DIGIT 1", "DIGIT 2", "DIGIT 3", "DIGIT 4", "DIGIT 5")) +
+  ggtitle ("Mouse Manual Digits") + 
+  theme(plot.title = element_text(face = "bold")) +
+  theme(axis.text.x = element_text(face = "bold")) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+Young_Pedal_Phalangeal_Indices <- data.frame(Autopod_Digit_Number = c("PEDAL DIGIT 1", "PEDAL DIGIT 2", "PEDAL DIGIT 3", "PEDAL DIGIT 4", "PEDAL DIGIT 5"),
+  Mean = c(mean_intrinsic_young_6, mean_intrinsic_young_7, mean_intrinsic_young_8, mean_intrinsic_young_9, mean_intrinsic_young_10),
+  Upper_Bound = c(upper_bound_intrinsic_young_6, upper_bound_intrinsic_young_7, upper_bound_intrinsic_young_8, upper_bound_intrinsic_young_9, upper_bound_intrinsic_young_10),
+  Lower_Bound = c(lower_bound_intrinsic_young_6, lower_bound_intrinsic_young_7, lower_bound_intrinsic_young_8, lower_bound_intrinsic_young_9, lower_bound_intrinsic_young_10)
+  )
+
+ggplot(Young_Pedal_Phalangeal_Indices) +
+  geom_bar(aes(x = Autopod_Digit_Number, y = Mean), stat = 'identity', fill = 'gold3') +
+  geom_errorbar(aes(x = Autopod_Digit_Number, ymin = Lower_Bound, ymax = Upper_Bound), width = 0.4) +
+  geom_hline(yintercept = 0) +
+  labs (y = "Slope (PI versus Embryonic Timepoint)", x = "") +
+    scale_x_discrete(labels=c("DIGIT 1", "DIGIT 2", "DIGIT 3", "DIGIT 4", "DIGIT 5")) +
+  ggtitle ("Mouse Pedal Digits") + 
+  theme(plot.title = element_text(face = "bold")) +
+  theme(axis.text.x = element_text(face = "bold")) +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Manual PI Table
+  # Adding Digit Names
+Young_Manual_Phalangeal_Indices$Digit_Number <- c("Digit 1", "Digit 2", "Digit 3", "Digit 4", "Digit 5")
+Young_Manual_Phalangeal_Indices <- Young_Manual_Phalangeal_Indices[, c(5,1,2,3,4)]
+  # Removing Unnecessary Columns
+Young_Manual_Phalangeal_Indices <- Young_Manual_Phalangeal_Indices[,-c(2)]
+  # Renaming a Column
+colnames(Young_Manual_Phalangeal_Indices)[2] ="Slope"
+  # Extracting T-Value
+Young_Manual_Phalangeal_Indices$T_Value <- c(t_value_intrinsic_young_1, t_value_intrinsic_young_2, t_value_intrinsic_young_3, t_value_intrinsic_young_4, t_value_intrinsic_young_5)
+  # Extracting P-Values
+Young_Manual_Phalangeal_Indices$P_Value <- c(p_value_intrinsic_young_1_mouse, p_value_intrinsic_young_2_mouse, p_value_intrinsic_young_3_mouse, p_value_intrinsic_young_4_mouse, p_value_intrinsic_young_5_mouse)
+
+# Pedal PI Table
+  # Adding Digit Names
+Young_Pedal_Phalangeal_Indices$Digit_Number <- c("Digit 1", "Digit 2", "Digit 3", "Digit 4", "Digit 5")
+Young_Pedal_Phalangeal_Indices <- Young_Pedal_Phalangeal_Indices[, c(5,1,2,3,4)]
+  # Removing Unnecessary Columns
+Young_Pedal_Phalangeal_Indices <- Young_Pedal_Phalangeal_Indices[,-c(2)]
+  # Renaming a Column
+colnames(Young_Pedal_Phalangeal_Indices)[2] ="Slope"
+  # Extracting T-Value
+Young_Pedal_Phalangeal_Indices$T_Value <- c(t_value_intrinsic_young_6, t_value_intrinsic_young_7, t_value_intrinsic_young_8, t_value_intrinsic_young_9, t_value_intrinsic_young_10)
+  # Extracting P-Values
+Young_Pedal_Phalangeal_Indices$P_Value <- c(p_value_intrinsic_young_6_mouse, p_value_intrinsic_young_7_mouse, p_value_intrinsic_young_8_mouse, p_value_intrinsic_young_9_mouse, p_value_intrinsic_young_10_mouse)
+
+# Saving Tables as Mouse-Specific
+Mouse_Manual_Phalangeal_Indices <- Young_Manual_Phalangeal_Indices
+Mouse_Pedal_Phalangeal_Indices <- Young_Pedal_Phalangeal_Indices
+```
+
+## Extrinsic Measure - Mouse
+```{r}
+# Extrinsic Measure: Ontogenetic Allometry of Metapodial and Phalangeal Lengths [RECREATION OF FIGURE 4 in Druelle et. al (2018)]
+  # The study used bivariate log-log regression of the individual digit ray bone lengths on total body mass. The slopes were compared to the isometric expectation of "0.333" for length v. mass. For this current version of the R script I will be examining the Metapodial and Phalangeal Lengths in respect to the Crown-rump Length, the scaling exponent for this will be "1.000".
+
+# Formatting the Data - For Graphs (Mean & SD)
+  # Forepaw Metapodials
+model_extrinsic_druelle_1 = lm(HM1_z_score ~ Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_2 = lm(HM2_z_score ~ Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_3 = lm(HM3_z_score ~ Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_4 = lm(HM4_z_score ~ Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_5 = lm(HM5_z_score ~ Crown_rump_length, data = mouse_autopod_data_z_score)
+  # Forepaw Phalanges
+model_extrinsic_druelle_6 = lm(HP1_z_score ~ Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_7 = lm(HP2_z_score ~ Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_8 = lm(HP3_z_score ~ Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_9 = lm(HP4_z_score ~ Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_10 = lm(HP5_z_score ~ Crown_rump_length, data = mouse_autopod_data_z_score)
+  # Hind Paw Metapodials
+model_extrinsic_druelle_11 = lm(FM1_z_score ~ Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_12 = lm(FM2_z_score ~ Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_13 = lm(FM3_z_score ~ Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_14 = lm(FM4_z_score ~ Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_15 = lm(FM5_z_score ~ Crown_rump_length, data = mouse_autopod_data_z_score)
+  # Hind Paw Phalanges
+model_extrinsic_druelle_16 = lm(FP1_z_score ~ Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_17 = lm(FP2_z_score ~ Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_18 = lm(FP3_z_score ~ Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_19 = lm(FP4_z_score ~ Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_20 = lm(FP5_z_score ~ Crown_rump_length, data = mouse_autopod_data_z_score)
+
+# Formatting the Data - Setting Null = 1.00 for 1D-1D Scaling (For T-Value & P-Value)
+  # Forepaw Metapodials
+model_extrinsic_druelle_1_offset = lm(HM1_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_2_offset = lm(HM2_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_3_offset = lm(HM3_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_4_offset = lm(HM4_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_5_offset = lm(HM5_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = mouse_autopod_data_z_score)
+  # Forepaw Phalanges
+model_extrinsic_druelle_6_offset = lm(HP1_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_7_offset = lm(HP2_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_8_offset = lm(HP3_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_9_offset = lm(HP4_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_10_offset = lm(HP5_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = mouse_autopod_data_z_score)
+  # Hind Paw Metapodials
+model_extrinsic_druelle_11_offset = lm(FM1_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_12_offset = lm(FM2_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_13_offset = lm(FM3_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_14_offset = lm(FM4_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_15_offset = lm(FM5_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = mouse_autopod_data_z_score)
+  # Hind Paw Phalanges
+model_extrinsic_druelle_16_offset = lm(FP1_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_17_offset = lm(FP2_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_18_offset = lm(FP3_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_19_offset = lm(FP4_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = mouse_autopod_data_z_score)
+model_extrinsic_druelle_20_offset = lm(FP5_z_score ~ Crown_rump_length, offset = 1.00*Crown_rump_length, data = mouse_autopod_data_z_score)
+
+# Extracting the Numbers
+m = summary(model_extrinsic_druelle_1)
+  mean_extrinsic_druelle_1 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_1 <- confint(model_extrinsic_druelle_1, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_1 <- confint(model_extrinsic_druelle_1, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_1_offset)  
+  t_value_extrinsic_druelle_1 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_1_mouse <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_2)
+  mean_extrinsic_druelle_2 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_2 <- confint(model_extrinsic_druelle_2, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_2 <- confint(model_extrinsic_druelle_2, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_2_offset)  
+  t_value_extrinsic_druelle_2 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_2_mouse <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_3)
+  mean_extrinsic_druelle_3 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_3 <- confint(model_extrinsic_druelle_3, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_3 <- confint(model_extrinsic_druelle_3, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_3_offset)  
+  t_value_extrinsic_druelle_3 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_3_mouse <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_4)
+  mean_extrinsic_druelle_4 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_4 <- confint(model_extrinsic_druelle_4, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_4 <- confint(model_extrinsic_druelle_4, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_4_offset)  
+  t_value_extrinsic_druelle_4 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_4_mouse <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_5)
+  mean_extrinsic_druelle_5 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_5 <- confint(model_extrinsic_druelle_5, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_5 <- confint(model_extrinsic_druelle_5, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_5_offset)  
+  t_value_extrinsic_druelle_5 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_5_mouse <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_6)
+  mean_extrinsic_druelle_6 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_6 <- confint(model_extrinsic_druelle_6, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_6 <- confint(model_extrinsic_druelle_6, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_6_offset)  
+  t_value_extrinsic_druelle_6 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_6_mouse <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_7)
+  mean_extrinsic_druelle_7 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_7 <- confint(model_extrinsic_druelle_7, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_7 <- confint(model_extrinsic_druelle_7, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_7_offset)  
+  t_value_extrinsic_druelle_7 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_7_mouse <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_8)
+  mean_extrinsic_druelle_8 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_8 <- confint(model_extrinsic_druelle_8, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_8 <- confint(model_extrinsic_druelle_8, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_8_offset)  
+  t_value_extrinsic_druelle_8 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_8_mouse <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_9)
+  mean_extrinsic_druelle_9 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_9 <- confint(model_extrinsic_druelle_9, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_9 <- confint(model_extrinsic_druelle_9, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_9_offset)  
+  t_value_extrinsic_druelle_9 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_9_mouse <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_10)
+  mean_extrinsic_druelle_10 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_10 <- confint(model_extrinsic_druelle_10, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_10 <- confint(model_extrinsic_druelle_10, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_10_offset)  
+  t_value_extrinsic_druelle_10 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_10_mouse <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_11)
+  mean_extrinsic_druelle_11 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_11 <- confint(model_extrinsic_druelle_11, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_11 <- confint(model_extrinsic_druelle_11, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_11_offset)  
+  t_value_extrinsic_druelle_11 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_11_mouse <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_12)
+  mean_extrinsic_druelle_12 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_12 <- confint(model_extrinsic_druelle_12, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_12 <- confint(model_extrinsic_druelle_12, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_12_offset)  
+  t_value_extrinsic_druelle_12 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_12_mouse <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_13)
+  mean_extrinsic_druelle_13 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_13 <- confint(model_extrinsic_druelle_13, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_13 <- confint(model_extrinsic_druelle_13, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_13_offset)  
+  t_value_extrinsic_druelle_13 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_13_mouse <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_14)
+  mean_extrinsic_druelle_14 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_14 <- confint(model_extrinsic_druelle_14, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_14 <- confint(model_extrinsic_druelle_14, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_14_offset)  
+  t_value_extrinsic_druelle_14 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_14_mouse <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_15)
+  mean_extrinsic_druelle_15 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_15 <- confint(model_extrinsic_druelle_15, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_15 <- confint(model_extrinsic_druelle_15, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_15_offset)  
+  t_value_extrinsic_druelle_15 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_15_mouse <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_16)
+  mean_extrinsic_druelle_16 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_16 <- confint(model_extrinsic_druelle_16, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_16 <- confint(model_extrinsic_druelle_16, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_16_offset)  
+  t_value_extrinsic_druelle_16 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_16_mouse <- n$coefficients[2,4]
+
+m = summary(model_extrinsic_druelle_17)
+  mean_extrinsic_druelle_17 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_17 <- confint(model_extrinsic_druelle_17, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_17 <- confint(model_extrinsic_druelle_17, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_17_offset)  
+  t_value_extrinsic_druelle_17 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_17_mouse <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_18)
+  mean_extrinsic_druelle_18 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_18 <- confint(model_extrinsic_druelle_18, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_18 <- confint(model_extrinsic_druelle_18, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_18_offset)  
+  t_value_extrinsic_druelle_18 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_18_mouse <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_19)
+  mean_extrinsic_druelle_19 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_19 <- confint(model_extrinsic_druelle_19, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_19 <- confint(model_extrinsic_druelle_19, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_19_offset)  
+  t_value_extrinsic_druelle_19 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_19_mouse <- n$coefficients[2,4]
+  
+m = summary(model_extrinsic_druelle_20)
+  mean_extrinsic_druelle_20 <- m$coefficients[2,1]
+  upper_bound_extrinsic_druelle_20 <- confint(model_extrinsic_druelle_20, "Crown_rump_length")[2]
+  lower_bound_extrinsic_druelle_20 <- confint(model_extrinsic_druelle_20, "Crown_rump_length")[1]
+n = summary(model_extrinsic_druelle_20_offset)  
+  t_value_extrinsic_druelle_20 <- n$coefficients[2,3]
+  p_value_extrinsic_druelle_20_mouse <- n$coefficients[2,4]
+```
+
+## Ontogenetic Allometry Graphs - Mouse
+```{r}
+# Formatting the Data for Tidyverse
+# Renaming
+mouse_autopod_data_extrinsic_graph <- mouse_autopod_data_z_score %>% 
+        rename("HP1" = "HP1_z_score",
+               "HP2" = "HP2_z_score",
+               "HP3" = "HP3_z_score",
+               "HP4" = "HP4_z_score",
+               "HP5" = "HP5_z_score",
+               "HM1" = "HM1_z_score",
+               "HM2" = "HM2_z_score",
+               "HM3" = "HM3_z_score",
+               "HM4" = "HM4_z_score",
+               "HM5" = "HM5_z_score",
+               "FP1" = "FP1_z_score",
+               "FP2" = "FP2_z_score",
+               "FP3" = "FP3_z_score",
+               "FP4" = "FP4_z_score",
+               "FP5" = "FP5_z_score",
+               "FM1" = "FM1_z_score",
+               "FM2" = "FM2_z_score",
+               "FM3" = "FM3_z_score",
+               "FM4" = "FM4_z_score",
+               "FM5" = "FM5_z_score")
+  # Tidyverse
+mouse_measurements <- colnames(mouse_autopod_data_extrinsic_graph)[8:27]
+mouse_autopod_data_tidy_z_score <- mouse_autopod_data_extrinsic_graph %>% pivot_longer(all_of(mouse_measurements), names_to = "measurement_id") %>% select(-notes) %>% select(-timepoint)
+
+# Facet-Wrap() for Ontogenetic Allometry
+ggplot(data = mouse_autopod_data_tidy_z_score, aes(Crown_rump_length, value)) +
+  geom_point(color = "gold") + 
+  labs(title = "Mouse Allometry",
+       y = "Z-score Transformed Length", x = "Z-score Transformed Crown-rump Length") + 
+  facet_wrap(~ measurement_id, nrow = 4)  + stat_smooth(method = 'lm', formula = y ~ x, geom = "smooth", color = "gold")
+```
+
+## Summation Plots & Tables of Extrinsic Measurements - Mouse
+```{r}
+# Manual Digits Ontogenetic Allometry Plot
+Druelle_Manual_Comparison_to_CRL <- data.frame(Mean = c(mean_extrinsic_druelle_1, mean_extrinsic_druelle_6, mean_extrinsic_druelle_2, mean_extrinsic_druelle_7, mean_extrinsic_druelle_3, mean_extrinsic_druelle_8, mean_extrinsic_druelle_4, mean_extrinsic_druelle_9, mean_extrinsic_druelle_5, mean_extrinsic_druelle_10),
+  Lower_Bound = c(lower_bound_extrinsic_druelle_1, lower_bound_extrinsic_druelle_6, lower_bound_extrinsic_druelle_2, lower_bound_extrinsic_druelle_7, lower_bound_extrinsic_druelle_3, lower_bound_extrinsic_druelle_8, lower_bound_extrinsic_druelle_4, lower_bound_extrinsic_druelle_9, lower_bound_extrinsic_druelle_5, lower_bound_extrinsic_druelle_10),
+  Upper_Bound = c(upper_bound_extrinsic_druelle_1, upper_bound_extrinsic_druelle_6, upper_bound_extrinsic_druelle_2, upper_bound_extrinsic_druelle_7, upper_bound_extrinsic_druelle_3, upper_bound_extrinsic_druelle_8, upper_bound_extrinsic_druelle_4, upper_bound_extrinsic_druelle_9, upper_bound_extrinsic_druelle_5, upper_bound_extrinsic_druelle_10),
+  Autopod_Type = rep(c("Metapodial", "Phalange"), 5),
+  grp = c(rep("DIGIT 1", 2),rep("DIGIT 2", 2),rep("DIGIT 3", 2),rep("DIGIT 4", 2),rep("DIGIT 5", 2))
+  )
+
+Druelle_Manual_Comparison_to_CRL %>%
+ggplot(aes(x = grp, y = Mean, groups = Autopod_Type, fill = Autopod_Type)) +
+  stat_summary(fun = mean, geom = "bar", position = position_dodge()) +
+geom_errorbar(aes(ymin = Lower_Bound, ymax = Upper_Bound), width = 0.2, position = position_dodge(0.9)) +
+  geom_hline(yintercept = 1) +
+  labs (y = "Scaling Exponent", x = "", fill = "Autopod Type") +
+  ggtitle ("Mouse Manual Digits") +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(axis.text.x = element_text(face = "bold")) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_y_continuous(expand=c(0,0))
+
+# Pedal Digits Ontogenetic Allometry Plot
+Druelle_Pedal_Comparison_to_CRL <- data.frame(Mean = c(mean_extrinsic_druelle_11, mean_extrinsic_druelle_16, mean_extrinsic_druelle_12, mean_extrinsic_druelle_17, mean_extrinsic_druelle_13, mean_extrinsic_druelle_18, mean_extrinsic_druelle_14, mean_extrinsic_druelle_19, mean_extrinsic_druelle_15, mean_extrinsic_druelle_20),
+  Lower_Bound = c(lower_bound_extrinsic_druelle_11, lower_bound_extrinsic_druelle_16, lower_bound_extrinsic_druelle_12, lower_bound_extrinsic_druelle_17, lower_bound_extrinsic_druelle_13, lower_bound_extrinsic_druelle_18, lower_bound_extrinsic_druelle_14, lower_bound_extrinsic_druelle_19, lower_bound_extrinsic_druelle_15, lower_bound_extrinsic_druelle_20),
+  Upper_Bound = c(upper_bound_extrinsic_druelle_11, upper_bound_extrinsic_druelle_16, upper_bound_extrinsic_druelle_12, upper_bound_extrinsic_druelle_17, upper_bound_extrinsic_druelle_13, upper_bound_extrinsic_druelle_18, upper_bound_extrinsic_druelle_14, upper_bound_extrinsic_druelle_19, upper_bound_extrinsic_druelle_15, upper_bound_extrinsic_druelle_20),
+  Autopod_Type = rep(c("Metapodial", "Phalange"), 5),
+  grp = c(rep("DIGIT 1", 2),rep("DIGIT 2", 2),rep("DIGIT 3", 2),rep("DIGIT 4", 2),rep("DIGIT 5", 2))
+  )
+
+Druelle_Pedal_Comparison_to_CRL %>%
+ggplot(aes(x = grp, y = Mean, groups = Autopod_Type, fill = Autopod_Type)) +
+  stat_summary(fun = mean, geom = "bar", position = position_dodge()) +
+geom_errorbar(aes(ymin = Lower_Bound, ymax = Upper_Bound), width = 0.2, position = position_dodge(0.9)) +
+  geom_hline(yintercept = 1) +
+  labs (y = "Scaling Exponent", x = "", fill = "Autopod Type") +
+  ggtitle ("Mouse Pedal Digits") +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(axis.text.x = element_text(face = "bold")) + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_y_continuous(expand=c(0,0))
+
+# Ontogenetic Allometry Table
+  # Manual Digits Table 
+    # Adding Autopod Element Names
+Druelle_Manual_Comparison_to_CRL$Autopod_Element <- c("Metapodial 1", "Phalange 1", "Metapodial 2", "Phalange 2", "Metapodial 3", "Phalange 3", "Metapodial 4", "Phalange 4", "Metapodial 5", "Phalange 5")
+Druelle_Manual_Comparison_to_CRL <- Druelle_Manual_Comparison_to_CRL[, c(6,1,2,3,4,5)]
+    # Subtracting Unnecessary Columns
+Druelle_Manual_Comparison_to_CRL <- Druelle_Manual_Comparison_to_CRL[,-c(5,6)]
+    # Extracting T-Value
+Druelle_Manual_Comparison_to_CRL$T_Value <- c(t_value_extrinsic_druelle_1, t_value_extrinsic_druelle_6, t_value_extrinsic_druelle_2,
+t_value_extrinsic_druelle_7, t_value_extrinsic_druelle_3,
+t_value_extrinsic_druelle_8, t_value_extrinsic_druelle_4,
+t_value_extrinsic_druelle_9, t_value_extrinsic_druelle_5,
+t_value_extrinsic_druelle_10)
+    # Extracting P-Value
+Druelle_Manual_Comparison_to_CRL$P_Value <- c(p_value_extrinsic_druelle_1_mouse, p_value_extrinsic_druelle_6_mouse, p_value_extrinsic_druelle_2_mouse,
+p_value_extrinsic_druelle_7_mouse, p_value_extrinsic_druelle_3_mouse,
+p_value_extrinsic_druelle_8_mouse, p_value_extrinsic_druelle_4_mouse,
+p_value_extrinsic_druelle_9_mouse, p_value_extrinsic_druelle_5_mouse,
+p_value_extrinsic_druelle_10_mouse)
+
+  # Pedal Digits Table 
+    # Adding Autopod Element Names
+Druelle_Pedal_Comparison_to_CRL$Autopod_Element <- c("Metapodial 1", "Phalange 1", "Metapodial 2", "Phalange 2", "Metapodial 3", "Phalange 3", "Metapodial 4", "Phalange 4", "Metapodial 5", "Phalange 5")
+Druelle_Pedal_Comparison_to_CRL <- Druelle_Pedal_Comparison_to_CRL[, c(6,1,2,3,4,5)]
+    # Subtracting Unnecessary Columns
+Druelle_Pedal_Comparison_to_CRL <- Druelle_Pedal_Comparison_to_CRL[,-c(5,6)]
+    # Extracting R-Squared Value
+Druelle_Pedal_Comparison_to_CRL$T_Value <- c(t_value_extrinsic_druelle_11, t_value_extrinsic_druelle_16, t_value_extrinsic_druelle_12,
+t_value_extrinsic_druelle_17, t_value_extrinsic_druelle_13,
+t_value_extrinsic_druelle_18, t_value_extrinsic_druelle_14,
+t_value_extrinsic_druelle_19, t_value_extrinsic_druelle_15,
+t_value_extrinsic_druelle_20)
+    # Extracting P-Value
+Druelle_Pedal_Comparison_to_CRL$P_Value <- c(p_value_extrinsic_druelle_11_mouse, p_value_extrinsic_druelle_16_mouse, p_value_extrinsic_druelle_12_mouse, 
+p_value_extrinsic_druelle_17_mouse, p_value_extrinsic_druelle_13_mouse,
+p_value_extrinsic_druelle_18_mouse, p_value_extrinsic_druelle_14_mouse,
+p_value_extrinsic_druelle_19_mouse, p_value_extrinsic_druelle_15_mouse,
+p_value_extrinsic_druelle_20_mouse)
+
+# Saving Tables as Mouse-Specific
+Mouse_Manual_Comparison_to_CRL <- Druelle_Manual_Comparison_to_CRL
+Mouse_Pedal_Comparison_to_CRL <- Druelle_Pedal_Comparison_to_CRL
+```
+
+## Linear Regression Assumptions - Mouse
+```{r}
+# Manual_1
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_intrinsic$timepoint, mouse_autopod_data_intrinsic$MOUSE_MANUAL_DIGIT_1)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_intrinsic_young_1)
+    # Look only at "Fitted Residuals" and "Normal Q-Q"
+
+# Manual_2
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_intrinsic$timepoint, mouse_autopod_data_intrinsic$MOUSE_MANUAL_DIGIT_2)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_intrinsic_young_2)
+
+# Manual_3
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_intrinsic$timepoint, mouse_autopod_data_intrinsic$MOUSE_MANUAL_DIGIT_3)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_intrinsic_young_3)
+
+# Manual_4
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_intrinsic$timepoint, mouse_autopod_data_intrinsic$MOUSE_MANUAL_DIGIT_4)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_intrinsic_young_4)
+
+# Manual_5
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_intrinsic$timepoint, mouse_autopod_data_intrinsic$MOUSE_MANUAL_DIGIT_5)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_intrinsic_young_5)
+
+# Pedal_1
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_intrinsic$timepoint, mouse_autopod_data_intrinsic$MOUSE_PEDAL_DIGIT_1)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_intrinsic_young_6)
+
+# Pedal_2
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_intrinsic$timepoint, mouse_autopod_data_intrinsic$MOUSE_PEDAL_DIGIT_2)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_intrinsic_young_7)
+
+# Pedal_3
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_intrinsic$timepoint, mouse_autopod_data_intrinsic$MOUSE_PEDAL_DIGIT_3)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_intrinsic_young_8)
+
+# Pedal_4
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_intrinsic$timepoint, mouse_autopod_data_intrinsic$MOUSE_PEDAL_DIGIT_4)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_intrinsic_young_9)
+
+# Pedal_5
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_intrinsic$timepoint, mouse_autopod_data_intrinsic$MOUSE_PEDAL_DIGIT_5)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_intrinsic_young_10)
+
+# HM1
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_z_score$Crown_rump_length, mouse_autopod_data_z_score$HM1_z_score)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_1)
+
+# HM2
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_z_score$Crown_rump_length, mouse_autopod_data_z_score$HM2_z_score)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_2)
+
+# HM3
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_z_score$Crown_rump_length, mouse_autopod_data_z_score$HM3_z_score)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_3)
+
+# HM4
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_z_score$Crown_rump_length, mouse_autopod_data_z_score$HM4_z_score)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_4)
+
+# HM5
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_z_score$Crown_rump_length, mouse_autopod_data_z_score$HM5_z_score)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_5)
+
+# HP1
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_z_score$Crown_rump_length, mouse_autopod_data_z_score$HP1_z_score)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_6)
+
+# HP2
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_z_score$Crown_rump_length, mouse_autopod_data_z_score$HP2_z_score)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_7)
+
+# HP3
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_z_score$Crown_rump_length, mouse_autopod_data_z_score$HP3_z_score)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_8)
+
+# HP4
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_z_score$Crown_rump_length, mouse_autopod_data_z_score$HP4_z_score)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_9)
+
+# HP5
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_z_score$Crown_rump_length, mouse_autopod_data_z_score$HP5_z_score)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_10)
+
+# FM1
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_z_score$Crown_rump_length, mouse_autopod_data_z_score$FM1_z_score)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_11)
+
+# FM2
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_z_score$Crown_rump_length, mouse_autopod_data_z_score$FM2_z_score)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_12)
+
+# FM3
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_z_score$Crown_rump_length, mouse_autopod_data_z_score$FM3_z_score)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_13)
+
+# FM4
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_z_score$Crown_rump_length, mouse_autopod_data_z_score$FM4_z_score)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_14)
+
+# FM5
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_z_score$Crown_rump_length, mouse_autopod_data_z_score$FM5_z_score)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_15)
+
+# FP1
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_z_score$Crown_rump_length, mouse_autopod_data_z_score$FP1_z_score)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_16)
+
+# FP2
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_z_score$Crown_rump_length, mouse_autopod_data_z_score$FP2_z_score)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_17)
+
+# FP3
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_z_score$Crown_rump_length, mouse_autopod_data_z_score$FP3_z_score)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_18)
+
+# FP4
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_z_score$Crown_rump_length, mouse_autopod_data_z_score$FP4_z_score)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_19)
+
+# FP5
+  # 1.) Linear Relationship
+plot(mouse_autopod_data_z_score$Crown_rump_length, mouse_autopod_data_z_score$FP5_z_score)
+  # 3 & 4.) Homoscedasticity + Normality
+plot(model_extrinsic_druelle_20)
+```
+
+
+## Extracting Tables
+```{r}
+write.xlsx(Human_Manual_Comparison_to_CRL, "\\Users\\jonat\\OneDrive\\Documents\\Human_Manual_Comparison_to_CRL.xlsx")
+write.xlsx(Human_Manual_Phalangeal_Indices, "\\Users\\jonat\\OneDrive\\Documents\\Human_Manual_Phalangeal_Indices.xlsx")
+write.xlsx(Human_Pedal_Comparison_to_CRL, "\\Users\\jonat\\OneDrive\\Documents\\Human_Pedal_Comparison_to_CRL.xlsx")
+write.xlsx(Human_Pedal_Phalangeal_Indices, "\\Users\\jonat\\OneDrive\\Documents\\Human_Pedal_Phalangeal_Indices.xlsx")
+write.xlsx(Mouse_Manual_Comparison_to_CRL, "\\Users\\jonat\\OneDrive\\Documents\\Mouse_Manual_Comparison_to_CRL.xlsx")
+write.xlsx(Mouse_Manual_Phalangeal_Indices, "\\Users\\jonat\\OneDrive\\Documents\\Mouse_Manual_Phalangeal_Indices.xlsx")
+write.xlsx(Mouse_Pedal_Comparison_to_CRL, "\\Users\\jonat\\OneDrive\\Documents\\Mouse_Pedal_Comparison_to_CRL.xlsx")
+write.xlsx(Mouse_Pedal_Phalangeal_Indices, "\\Users\\jonat\\OneDrive\\Documents\\Mouse_Pedal_Phalangeal_Indices.xlsx")
+```
